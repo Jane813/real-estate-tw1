@@ -1,0 +1,5 @@
+real_estate.db
+downloaded_data/
+__pycache__/
+*.pyc
+.DS_Store

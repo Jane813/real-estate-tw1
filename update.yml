@@ -1,0 +1,75 @@
+name: 實價登錄月度更新
+
+on:
+  schedule:
+    - cron: '0 1 1 * *'   # 每月 1 日 UTC 01:00（台灣時間 09:00）
+  workflow_dispatch:
+    inputs:
+      months_back:
+        description: '匯入最近幾個月（預設 3）'
+        required: false
+        default: '3'
+      force_reimport:
+        description: '強制重新匯入（輸入 yes 清空重跑）'
+        required: false
+        default: ''
+
+jobs:
+  monthly-import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝必要套件
+        run: pip install requests pandas openpyxl xlrd python-dateutil google-auth google-api-python-client
+
+      - name: 還原資料庫
+        uses: actions/download-artifact@v4
+        with:
+          name: real-estate-db
+          path: .
+        continue-on-error: true
+
+      - name: 初始化資料庫
+        run: python -c "from main_1 import init_database; init_database()"
+
+      - name: 強制重新匯入（若有指定）
+        if: github.event.inputs.force_reimport == 'yes'
+        run: python clear_db_1.py
+
+      - name: 匯入月度資料
+        run: |
+          MONTHS="${{ github.event.inputs.months_back }}"
+          MONTHS="${MONTHS:-3}"
+          python main_1.py import $MONTHS
+
+      - name: 顯示資料統計
+        run: python main_1.py stats
+
+      - name: 寫入 Google Sheet
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python sheets_writer.py
+
+      - name: 產生月報 Excel
+        run: python report.py
+
+      - name: 儲存資料庫
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-estate-db
+          path: real_estate.db
+          retention-days: 400
+
+      - name: 儲存月報
+        uses: actions/upload-artifact@v4
+        with:
+          name: 實價登錄月報
+          path: 實價登錄月報.xlsx
+          retention-days: 400
