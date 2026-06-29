@@ -5,10 +5,10 @@ on:
     - cron: '0 1 1 * *'   # 每月 1 日 UTC 01:00（台灣時間 09:00）
   workflow_dispatch:
     inputs:
-      months_back:
-        description: '匯入最近幾個月（預設 3）'
+      target_month:
+        description: '指定匯入年月（如 2026-02），留空則自動匯入最近 3 個月'
         required: false
-        default: '3'
+        default: ''
       force_reimport:
         description: '強制重新匯入（輸入 yes 清空重跑）'
         required: false
@@ -45,9 +45,12 @@ jobs:
 
       - name: 匯入月度資料
         run: |
-          MONTHS="${{ github.event.inputs.months_back }}"
-          MONTHS="${MONTHS:-3}"
-          python main_1.py import $MONTHS
+          TARGET="${{ github.event.inputs.target_month }}"
+          if [ -n "$TARGET" ]; then
+            python main_1.py import $TARGET
+          else
+            python main_1.py import 3
+          fi
 
       - name: 顯示資料統計
         run: python main_1.py stats

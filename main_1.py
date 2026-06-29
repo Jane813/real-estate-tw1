@@ -321,6 +321,30 @@ def cleanup_old_data(months_keep=3):
 
 # ── 主流程 ───────────────────────────────────────────────
 
+def run_import_month(ym):
+    """下載最新 XLS，只匯入指定年月（格式：YYYY-MM）"""
+    try:
+        year_ad = int(ym[:4])
+        month = int(ym[5:7])
+    except Exception:
+        log(f"年月格式錯誤：{ym}（應為 YYYY-MM，例如 2026-02）")
+        return
+
+    log(f"=== 匯入指定月份：{ym} ===")
+    zip_path = download_xls()
+    if not zip_path:
+        log("XLS 下載失敗，終止")
+        return
+
+    folder = extract_zip(zip_path, "opendata")
+    d_start, d_end = roc_date_range(year_ad, month)
+    season_code = get_season_code(year_ad, month)
+    log(f"--- {ym} ---")
+    df = read_xls(folder, d_start, d_end)
+    save_to_db(df, ym, season_code, "XLS")
+    log(f"=== {ym} 匯入完成 ===")
+
+
 def run_import(months_back=3):
     """
     下載最新 XLS，匯入最近 N 個月的成交紀錄。
@@ -414,8 +438,13 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
 
     if cmd == "import":
-        n = int(sys.argv[2]) if len(sys.argv) > 2 else 3
-        run_import(n)
+        arg = sys.argv[2] if len(sys.argv) > 2 else ""
+        import re
+        if arg and re.match(r"^\d{4}-\d{2}$", arg):
+            run_import_month(arg)
+        else:
+            n = int(arg) if arg else 3
+            run_import(n)
     elif cmd == "backfill":
         season = sys.argv[2] if len(sys.argv) > 2 else None
         if not season:
