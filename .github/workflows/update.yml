@@ -65,11 +65,11 @@ jobs:
         with:
           name: real-estate-db
           path: real_estate.db
-          retention-days: 400
+          retention-days: 90
 
       - name: 儲存月報
         uses: actions/upload-artifact@v4
         with:
           name: 實價登錄月報
           path: 實價登錄月報.xlsx
-          retention-days: 400
+          retention-days: 90
