@@ -30,11 +30,11 @@ jobs:
         run: pip install requests pandas openpyxl xlrd python-dateutil google-auth google-api-python-client
 
       - name: 還原資料庫
-        uses: actions/download-artifact@v4
+        uses: actions/cache@v4
         with:
-          name: real-estate-db
-          path: .
-        continue-on-error: true
+          path: real_estate.db
+          key: real-estate-db-${{ github.run_id }}
+          restore-keys: real-estate-db-
 
       - name: 初始化資料庫
         run: python -c "from main_1 import init_database; init_database()"
@@ -60,7 +60,7 @@ jobs:
       - name: 產生月報 Excel
         run: python report.py
 
-      - name: 儲存資料庫
+      - name: 儲存資料庫（artifact 備份）
         uses: actions/upload-artifact@v4
         with:
           name: real-estate-db
