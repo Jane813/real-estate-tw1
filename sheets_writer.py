@@ -353,6 +353,34 @@ def build_district(df, dist):
         return []
 
     rows = []
+
+    # ── 月度彙總 ──
+    rows.append([f"【{dist}】月度成交統計"])
+    rows.append(["成交年月", "成交筆數",
+                 "均單（萬/坪）", "中位單（萬/坪）",
+                 "最高單（萬/坪）", "最低單（萬/坪）",
+                 "均總（萬）", "最高總（萬）", "最低總（萬）"])
+    if "年月" in ddf.columns:
+        mgrp = ddf.groupby("年月").agg(
+            筆數=("id", "count"),
+            均單=("單價萬坪", "mean"),
+            中位單=("單價萬坪", "median"),
+            最高單=("單價萬坪", "max"),
+            最低單=("單價萬坪", "min"),
+            均總=("總價萬", "mean"),
+            最高總=("總價萬", "max"),
+            最低總=("總價萬", "min"),
+        ).reset_index().sort_values("年月", ascending=False)
+        for _, r in mgrp.iterrows():
+            rows.append([str(r["年月"]), int(r["筆數"]),
+                         round(r["均單"], 2), round(r["中位單"], 2),
+                         round(r["最高單"], 2), round(r["最低單"], 2),
+                         round(r["均總"], 1), round(r["最高總"], 1),
+                         round(r["最低總"], 1)])
+    rows.append([])
+    rows.append([])
+
+    # ── 建案明細 ──
     rows.append([f"【{dist}】建案統計摘要（按成交月份）"])
     rows.append(["成交年月", "建案名稱", "成交筆數",
                  "均單（萬/坪）", "中位單（萬/坪）",
