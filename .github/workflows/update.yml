@@ -9,6 +9,10 @@ on:
         description: '指定匯入年月（如 2026-02），留空則自動匯入最近 3 個月'
         required: false
         default: ''
+      backfill_season:
+        description: '補匯歷史季度 CSV（如 115S1 = 2026年Q1，115S2 = Q2），需指定才執行'
+        required: false
+        default: ''
       force_reimport:
         description: '強制重新匯入（輸入 yes 清空重跑）'
         required: false
@@ -42,6 +46,10 @@ jobs:
       - name: 強制重新匯入（若有指定）
         if: github.event.inputs.force_reimport == 'yes'
         run: python clear_db_1.py
+
+      - name: 補匯歷史季度（若有指定）
+        if: github.event.inputs.backfill_season != ''
+        run: python main_1.py backfill ${{ github.event.inputs.backfill_season }}
 
       - name: 匯入月度資料
         run: |
