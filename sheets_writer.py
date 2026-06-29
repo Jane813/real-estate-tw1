@@ -434,12 +434,12 @@ def run():
 
     actual_districts = sorted(
         df["鄉鎮市區"].dropna().unique().tolist()) if not df.empty else []
-    all_titles = FIXED_SHEETS + actual_districts
-    log(f"共需 {len(all_titles)} 個 sheet（{len(actual_districts)} 個行政區）")
+    all_titles = FIXED_SHEETS + TAICHUNG_DISTRICTS
+    log(f"共需 {len(all_titles)} 個 sheet（{len(TAICHUNG_DISTRICTS)} 個行政區）")
 
     existing = get_existing_sheets(sheets)
     existing = ensure_all_sheets(sheets, all_titles, existing)
-    batch_clear(sheets, all_titles)
+    batch_clear(sheets, all_titles)  # 所有區分頁一律清空，無資料的留白
 
     log("準備資料中...")
     data_map = {
