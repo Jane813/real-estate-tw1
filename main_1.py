@@ -341,7 +341,12 @@ def run_import_month(ym):
 
     season_code = get_season_code(year_ad, month)
     d_start, d_end = roc_date_range(year_ad, month)
-    log(f"=== 匯入指定月份：{ym}（{season_code}）===")
+
+    # 預售屋登錄約延遲 70 天，CSV 季別應以「交易月 +2 個月」計算
+    from datetime import datetime as _dt
+    submission = _dt(year_ad, month, 1) + relativedelta(months=2)
+    csv_season = get_season_code(submission.year, submission.month)
+    log(f"=== 匯入指定月份：{ym}（交易季：{season_code}，CSV季：{csv_season}）===")
 
     # 先試 XLS
     inserted = 0
@@ -353,17 +358,17 @@ def run_import_month(ym):
         if not df.empty:
             inserted = save_to_db(df, ym, season_code, "XLS")
 
-    # XLS 無此月資料，自動改用季度 CSV
+    # XLS 無此月資料，用「申報季度」CSV 補匯
     if inserted == 0:
-        log(f"XLS 無 {ym} 資料，自動改用季度 CSV（{season_code}）補匯...")
-        zip_csv = download_season_csv(season_code)
+        log(f"XLS 無 {ym} 資料，改用申報季度 CSV（{csv_season}）補匯...")
+        zip_csv = download_season_csv(csv_season)
         if zip_csv:
-            folder_csv = extract_zip(zip_csv, season_code)
-            log(f"--- {ym}（CSV）---")
+            folder_csv = extract_zip(zip_csv, csv_season)
+            log(f"--- {ym}（CSV {csv_season}）---")
             df_csv = read_csv(folder_csv, d_start, d_end)
-            save_to_db(df_csv, ym, season_code, "CSV")
+            save_to_db(df_csv, ym, csv_season, "CSV")
         else:
-            log(f"季度 CSV 也下載失敗，{ym} 無資料可匯入")
+            log(f"季度 CSV（{csv_season}）下載失敗，{ym} 無資料可匯入")
 
     log(f"=== {ym} 匯入完成 ===")
 
