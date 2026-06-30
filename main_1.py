@@ -322,7 +322,10 @@ def cleanup_old_data(months_keep=3):
 # ── 主流程 ───────────────────────────────────────────────
 
 def run_import_month(ym):
-    """下載最新 XLS，只匯入指定年月（格式：YYYY-MM）"""
+    """
+    匯入指定年月（格式：YYYY-MM）。
+    自動判斷來源：先試 XLS 滾動檔，沒資料則自動改用季度 CSV 補匯。
+    """
     try:
         year_ad = int(ym[:4])
         month = int(ym[5:7])
@@ -330,18 +333,32 @@ def run_import_month(ym):
         log(f"年月格式錯誤：{ym}（應為 YYYY-MM，例如 2026-02）")
         return
 
-    log(f"=== 匯入指定月份：{ym} ===")
-    zip_path = download_xls()
-    if not zip_path:
-        log("XLS 下載失敗，終止")
-        return
-
-    folder = extract_zip(zip_path, "opendata")
-    d_start, d_end = roc_date_range(year_ad, month)
     season_code = get_season_code(year_ad, month)
-    log(f"--- {ym} ---")
-    df = read_xls(folder, d_start, d_end)
-    save_to_db(df, ym, season_code, "XLS")
+    d_start, d_end = roc_date_range(year_ad, month)
+    log(f"=== 匯入指定月份：{ym}（{season_code}）===")
+
+    # 先試 XLS
+    inserted = 0
+    zip_path = download_xls()
+    if zip_path:
+        folder = extract_zip(zip_path, "opendata")
+        log(f"--- {ym}（XLS）---")
+        df = read_xls(folder, d_start, d_end)
+        if not df.empty:
+            inserted = save_to_db(df, ym, season_code, "XLS")
+
+    # XLS 無此月資料，自動改用季度 CSV
+    if inserted == 0:
+        log(f"XLS 無 {ym} 資料，自動改用季度 CSV（{season_code}）補匯...")
+        zip_csv = download_season_csv(season_code)
+        if zip_csv:
+            folder_csv = extract_zip(zip_csv, season_code)
+            log(f"--- {ym}（CSV）---")
+            df_csv = read_csv(folder_csv, d_start, d_end)
+            save_to_db(df_csv, ym, season_code, "CSV")
+        else:
+            log(f"季度 CSV 也下載失敗，{ym} 無資料可匯入")
+
     log(f"=== {ym} 匯入完成 ===")
 
 
