@@ -387,19 +387,32 @@ def run_import(months_back=3):
         f"{months[-1].strftime('%Y-%m')} ~ {months[0].strftime('%Y-%m')} ===")
 
     zip_path = download_xls()
-    if not zip_path:
-        log("XLS 下載失敗，終止")
-        return
-
-    folder = extract_zip(zip_path, "opendata")
+    folder = extract_zip(zip_path, "opendata") if zip_path else None
 
     for t in months:
         ym = t.strftime("%Y-%m")
         d_start, d_end = roc_date_range(t.year, t.month)
         season_code = get_season_code(t.year, t.month)
         log(f"--- {ym} ---")
-        df = read_xls(folder, d_start, d_end)
-        save_to_db(df, ym, season_code, "XLS")
+
+        inserted = 0
+        if folder:
+            df = read_xls(folder, d_start, d_end)
+            if not df.empty:
+                inserted = save_to_db(df, ym, season_code, "XLS")
+
+        # XLS 無此月資料，自動用申報季度 CSV 補匯
+        if inserted == 0:
+            submission = t + relativedelta(months=2)
+            csv_season = get_season_code(submission.year, submission.month)
+            log(f"  XLS 無 {ym} 資料，改試 CSV（{csv_season}）...")
+            zip_csv = download_season_csv(csv_season)
+            if zip_csv:
+                folder_csv = extract_zip(zip_csv, csv_season)
+                df_csv = read_csv(folder_csv, d_start, d_end)
+                save_to_db(df_csv, ym, csv_season, "CSV")
+            else:
+                log(f"  CSV（{csv_season}）也無法取得，{ym} 暫無資料")
 
     cleanup_old_data(months_back)
     log("=== 匯入完成 ===")
