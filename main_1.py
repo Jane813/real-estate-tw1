@@ -141,13 +141,19 @@ def download_season_csv(season_code):
         "Referer": "https://plvr.land.moi.gov.tw/DownloadOpenData",
     }
     log(f"[CSV] 下載季度歸檔 {season_code}...")
+
+    # 先嘗試取 cookie（失敗也繼續，不中斷）
     try:
         session.get("https://plvr.land.moi.gov.tw/DownloadOpenData",
                     headers=headers, timeout=30)
+    except Exception:
+        log("[CSV] cookie 預取逾時，直接嘗試下載...")
+
+    try:
         r = session.get(
             "https://plvr.land.moi.gov.tw/DownloadSeason",
             params={"season": season_code, "type": "zip", "fileName": "lvr_landcsv.zip"},
-            headers=headers, timeout=180
+            headers=headers, timeout=300
         )
         if r.status_code == 200 and len(r.content) > 50000:
             os.makedirs(DATA_FOLDER, exist_ok=True)
@@ -157,7 +163,7 @@ def download_season_csv(season_code):
             log(f"[CSV] 下載完成（{len(r.content)//1024} KB）")
             return path
         else:
-            log(f"[CSV] 下載失敗")
+            log(f"[CSV] 下載失敗（HTTP {r.status_code}）")
             return None
     except Exception as e:
         log(f"[CSV] 下載錯誤：{e}")
