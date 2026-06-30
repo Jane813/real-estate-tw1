@@ -459,11 +459,7 @@ if __name__ == "__main__":
         import re
         m = re.match(r"^(\d{4})-(\d{1,2})$", arg) if arg else None
         if m:
-            # 輸入「執行年月」，匯入前一個月資料
-            ref = datetime(int(m.group(1)), int(m.group(2)), 1)
-            prev = ref - relativedelta(months=1)
-            ym = prev.strftime("%Y-%m")
-            log(f"輸入 {arg}，匯入前一個月：{ym}")
+            ym = f"{m.group(1)}-{int(m.group(2)):02d}"
             run_import_month(ym)
         else:
             n = int(arg) if arg else 3
