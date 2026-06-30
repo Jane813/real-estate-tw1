@@ -457,8 +457,14 @@ if __name__ == "__main__":
     if cmd == "import":
         arg = sys.argv[2] if len(sys.argv) > 2 else ""
         import re
-        if arg and re.match(r"^\d{4}-\d{2}$", arg):
-            run_import_month(arg)
+        m = re.match(r"^(\d{4})-(\d{1,2})$", arg) if arg else None
+        if m:
+            # 輸入「執行年月」，匯入前一個月資料
+            ref = datetime(int(m.group(1)), int(m.group(2)), 1)
+            prev = ref - relativedelta(months=1)
+            ym = prev.strftime("%Y-%m")
+            log(f"輸入 {arg}，匯入前一個月：{ym}")
+            run_import_month(ym)
         else:
             n = int(arg) if arg else 3
             run_import(n)
