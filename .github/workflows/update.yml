@@ -27,7 +27,7 @@ jobs:
           python-version: '3.11'
 
       - name: 安裝必要套件
-        run: pip install requests pandas openpyxl xlrd python-dateutil google-auth google-api-python-client
+        run: pip install requests pandas openpyxl xlrd python-dateutil google-auth google-api-python-client google-generativeai
 
       - name: 還原資料庫
         uses: actions/cache@v4
@@ -59,6 +59,13 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python sheets_writer.py
+
+      - name: 產生 AI 摘要
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python ai_summary.py
+        continue-on-error: true
 
       - name: 產生月報 Excel
         run: python report.py
