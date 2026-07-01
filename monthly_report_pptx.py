@@ -34,11 +34,11 @@ from pptx.chart.data import ChartData, BubbleChartData
 # ── 設定 ──────────────────────────────────────────────────────
 SHEET_ID             = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
 GID_DETAIL           = 501026080    # 預售屋總表（14欄月份格式）
-OUTPUT_DIR           = Path(r"\\192.168.1.103\admm\1-2公司基礎設備設定\實價登錄報告\報表產出")
-TEMPLATE             = Path(r"\\192.168.1.103\admm\1-2公司基礎設備設定\實價登錄報告\報表模板") / "template_月報.pptx"
-SERVICE_ACCOUNT_FILE = Path(r"C:\Users\absol\.config\gspread\service_account.json")
-GEMINI_KEY_FILE      = Path(r"C:\Users\absol\.config\gemini_api_key.txt")
-ZH_FONT              = "Microsoft JhengHei"
+OUTPUT_DIR           = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表產出")
+TEMPLATE             = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表模板/template_月報.pptx")
+SERVICE_ACCOUNT_FILE = Path.home() / ".config/gspread/service_account.json"
+GEMINI_KEY_FILE      = Path.home() / ".config/gemini_api_key.txt"
+ZH_FONT              = "PingFang TC"
 
 # 設計師配色
 C_GOLD  = RGBColor(0xCF, 0xAD, 0x1E)
@@ -501,28 +501,22 @@ out = OUTPUT_DIR / f"台中市房地產市場月報_{now.strftime('%Y%m')}.pptx"
 prs.save(out)
 print(f"PPTX 已生成：{out}")
 
-# ── 轉換 PDF ──────────────────────────────────────────────────
-try:
-    import win32com.client
-except ImportError:
-    print("安裝 pywin32...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pywin32", "-q"])
-    import win32com.client
-
-import tempfile, shutil
+# ── 轉換 PDF（Mac：LibreOffice）──────────────────────────────
+import shutil
 pdf_out = out.with_suffix(".pdf")
-try:
-    app = win32com.client.Dispatch("PowerPoint.Application")
-    app.Visible = True
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_pptx = Path(tmp) / out.name
-        tmp_pdf  = tmp_pptx.with_suffix(".pdf")
-        shutil.copy2(out, tmp_pptx)
-        deck = app.Presentations.Open(str(tmp_pptx))
-        deck.SaveAs(str(tmp_pdf), 32)
-        deck.Close()
-        shutil.copy2(tmp_pdf, pdf_out)
-    app.Quit()
-    print(f"PDF 已生成：{pdf_out}")
-except Exception as e:
-    print(f"PDF 轉換失敗（PPTX 仍已保留）：{e}")
+soffice = (
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+    if Path("/Applications/LibreOffice.app").exists()
+    else shutil.which("soffice")
+)
+if soffice:
+    try:
+        subprocess.run([
+            soffice, "--headless", "--convert-to", "pdf",
+            "--outdir", str(out.parent), str(out)
+        ], check=True, timeout=120)
+        print(f"PDF 已生成：{pdf_out}")
+    except Exception as e:
+        print(f"PDF 轉換失敗（PPTX 仍已保留）：{e}")
+else:
+    print("未安裝 LibreOffice，略過 PDF 轉換（PPTX 仍已保留）")
