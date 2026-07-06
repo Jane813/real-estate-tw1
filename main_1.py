@@ -414,7 +414,7 @@ def run_import(months_back=3):
             else:
                 log(f"  CSV（{csv_season}）也無法取得，{ym} 暫無資料")
 
-    cleanup_old_data(months_back)
+    cleanup_old_data(max(months_back, 12))
     log("=== 匯入完成 ===")
 
 

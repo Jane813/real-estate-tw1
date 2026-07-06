@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       target_month:
-        description: '指定匯入年月（如 2026-01），系統自動抓 XLS 或季度 CSV，留空則匯入最近 3 個月'
+        description: '指定匯入年月（如 2026-01），留空則匯入最近 12 個月'
+        required: false
+        default: ''
+      backfill_season:
+        description: '補匯歷史季度 CSV（如 115S1），留空略過'
         required: false
         default: ''
       force_reimport:
@@ -43,13 +47,17 @@ jobs:
         if: github.event.inputs.force_reimport == 'yes'
         run: python clear_db_1.py
 
+      - name: 補匯歷史季度（若有指定）
+        if: github.event.inputs.backfill_season != ''
+        run: python main_1.py backfill ${{ github.event.inputs.backfill_season }}
+
       - name: 匯入月度資料
         run: |
           TARGET="${{ github.event.inputs.target_month }}"
           if [ -n "$TARGET" ]; then
             python main_1.py import $TARGET
           else
-            python main_1.py import 3
+            python main_1.py import 12
           fi
 
       - name: 顯示資料統計
