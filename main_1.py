@@ -304,19 +304,20 @@ def save_to_db(df, ym, season_code, source):
 
 # ── 清理舊資料 ───────────────────────────────────────────
 
-def cleanup_old_data(months_keep=3):
-    """只保留最近 N 個月"""
-    cutoff = (datetime.now() - relativedelta(months=months_keep)).strftime("%Y-%m")
+def cleanup_old_data(months_keep=None):
+    """保留當年度所有月份資料，移除跨年舊資料（前一年度以前）"""
+    current_year = datetime.now().year
+    cutoff = f"{current_year}-01"   # 當年 1 月以前的才刪
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
         before = c.execute("SELECT COUNT(*) FROM presale").fetchone()[0]
         c.execute("DELETE FROM presale WHERE 年月 IS NOT NULL AND 年月 != '' AND 年月 < ?",
                   (cutoff,))
-        c.execute("DELETE FROM month_log WHERE 年月 < ?", (cutoff,))
+        c.execute("DELETE FROM month_log WHERE 年月 IS NOT NULL AND 年月 < ?", (cutoff,))
         after = c.execute("SELECT COUNT(*) FROM presale").fetchone()[0]
         if before - after > 0:
-            log(f"清除 {before - after} 筆（{cutoff} 以前），剩 {after} 筆")
+            log(f"清除 {before - after} 筆（{current_year} 年以前），剩 {after} 筆")
         else:
             log(f"無需清除（共 {after} 筆）")
     except Exception as e:
@@ -414,7 +415,7 @@ def run_import(months_back=3):
             else:
                 log(f"  CSV（{csv_season}）也無法取得，{ym} 暫無資料")
 
-    cleanup_old_data(max(months_back, 12))
+    cleanup_old_data()
     log("=== 匯入完成 ===")
 
 
