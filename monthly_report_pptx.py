@@ -7,12 +7,11 @@ Step 1：填入數據（圖表 + KPI）
 Step 2：Gemini AI 自動產出文字摘要
 """
 
-import sys, subprocess, re, json
+import sys, subprocess, re
 
 for pkg, imp in [
     ("requests","requests"), ("pandas","pandas"),
-    ("python-pptx","pptx"), ("gspread","gspread"),
-    ("google-genai","google.genai"),
+    ("python-pptx","pptx"), ("google-genai","google.genai"),
 ]:
     try:
         __import__(imp)
@@ -21,7 +20,6 @@ for pkg, imp in [
         subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "-q"])
 
 import io, requests, pandas as pd
-import gspread
 from google import genai
 from datetime import datetime
 from pathlib import Path
@@ -32,13 +30,12 @@ from pptx.dml.color import RGBColor
 from pptx.chart.data import ChartData, BubbleChartData
 
 # ── 設定 ──────────────────────────────────────────────────────
-SHEET_ID             = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
-GID_DETAIL           = 501026080    # 預售屋總表（14欄月份格式）
-OUTPUT_DIR           = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表產出")
-TEMPLATE             = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表模板/template_月報.pptx")
-SERVICE_ACCOUNT_FILE = Path.home() / ".config/gspread/service_account.json"
-GEMINI_KEY_FILE      = Path.home() / ".config/gemini_api_key.txt"
-ZH_FONT              = "PingFang TC"
+SHEET_ID        = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
+GID_DETAIL      = 501026080    # 預售屋總表（14欄月份格式）
+OUTPUT_DIR      = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表產出")
+TEMPLATE        = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表模板/template_月報.pptx")
+GEMINI_KEY_FILE = Path.home() / ".config/gemini_api_key.txt"
+ZH_FONT         = "PingFang TC"
 
 # 設計師配色
 C_GOLD  = RGBColor(0xCF, 0xAD, 0x1E)
@@ -48,8 +45,6 @@ C_GRAY  = RGBColor(0x95, 0xA5, 0xA6)
 
 if not TEMPLATE.exists():
     print(f"找不到模板：{TEMPLATE}"); sys.exit(1)
-if not SERVICE_ACCOUNT_FILE.exists():
-    print(f"找不到 Service Account 金鑰：{SERVICE_ACCOUNT_FILE}"); sys.exit(1)
 if not GEMINI_KEY_FILE.exists():
     print(f"找不到 Gemini API Key：{GEMINI_KEY_FILE}"); sys.exit(1)
 
@@ -65,18 +60,14 @@ def ask_gemini(prompt):
         print(f"  Gemini 呼叫失敗：{e}")
         return ""
 
-# ── 讀資料（gspread Service Account）────────────────────────
-gc = gspread.service_account(filename=str(SERVICE_ACCOUNT_FILE))
-
+# ── 讀資料（公開 CSV 匯出，不需登入）──────────────────────────
 def fetch_sheet(gid):
-    sh = gc.open_by_key(SHEET_ID)
-    ws = next((w for w in sh.worksheets() if w.id == gid), None)
-    if ws is None:
-        raise ValueError(f"找不到 gid={gid} 的工作表")
-    rows = ws.get_all_values()
-    if len(rows) < 2:
-        raise ValueError("工作表資料為空")
-    return pd.DataFrame(rows[1:], columns=rows[0])
+    url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+           f"/export?format=csv&gid={gid}")
+    r = requests.get(url, allow_redirects=True, timeout=30)
+    r.raise_for_status()
+    df = pd.read_csv(io.BytesIO(r.content), encoding="utf-8-sig")
+    return df
 
 print("讀取總表...")
 df = fetch_sheet(GID_DETAIL)
