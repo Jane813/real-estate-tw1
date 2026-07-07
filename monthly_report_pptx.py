@@ -4,14 +4,14 @@
 
 策略：開啟設計師格式化模板，更新文字與圖表資料，保留所有視覺設計。
 Step 1：填入數據（圖表 + KPI）
-Step 2：Gemini AI 自動產出文字摘要
+Step 2：Groq AI 自動產出文字摘要
 """
 
 import sys, subprocess, re
 
 for pkg, imp in [
     ("requests","requests"), ("pandas","pandas"),
-    ("python-pptx","pptx"), ("google-genai","google.genai"),
+    ("python-pptx","pptx"),
 ]:
     try:
         __import__(imp)
@@ -19,8 +19,7 @@ for pkg, imp in [
         print(f"安裝 {pkg}...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "-q"])
 
-import io, requests, pandas as pd
-from google import genai
+import io, json, requests, pandas as pd
 from datetime import datetime
 from pathlib import Path
 
@@ -30,12 +29,12 @@ from pptx.dml.color import RGBColor
 from pptx.chart.data import ChartData, BubbleChartData
 
 # ── 設定 ──────────────────────────────────────────────────────
-SHEET_ID        = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
-GID_DETAIL      = 501026080    # 預售屋總表（14欄月份格式）
-OUTPUT_DIR      = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表產出")
-TEMPLATE        = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表模板/template_月報.pptx")
-GEMINI_KEY_FILE = Path.home() / ".config/gemini_api_key.txt"
-ZH_FONT         = "PingFang TC"
+SHEET_ID       = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
+GID_DETAIL     = 501026080    # 預售屋總表（14欄月份格式）
+OUTPUT_DIR     = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表產出")
+TEMPLATE       = Path("/Volumes/ADMM/1-2公司基礎設備設定/實價登錄報告/報表模板/template_月報.pptx")
+GROQ_KEY_FILE  = Path.home() / ".config/groq_api_key.txt"
+ZH_FONT        = "PingFang TC"
 
 # 設計師配色
 C_GOLD  = RGBColor(0xCF, 0xAD, 0x1E)
@@ -45,19 +44,27 @@ C_GRAY  = RGBColor(0x95, 0xA5, 0xA6)
 
 if not TEMPLATE.exists():
     print(f"找不到模板：{TEMPLATE}"); sys.exit(1)
-if not GEMINI_KEY_FILE.exists():
-    print(f"找不到 Gemini API Key：{GEMINI_KEY_FILE}"); sys.exit(1)
+if not GROQ_KEY_FILE.exists():
+    print(f"找不到 Groq API Key：{GROQ_KEY_FILE}"); sys.exit(1)
 
-# ── Gemini 初始化 ──────────────────────────────────────────────
-_gc = genai.Client(api_key=GEMINI_KEY_FILE.read_text(encoding="utf-8").strip())
-GEMINI_MODEL = "gemini-2.0-flash-lite"
+# ── Groq 初始化 ────────────────────────────────────────────────
+_GROQ_KEY   = GROQ_KEY_FILE.read_text(encoding="utf-8").strip()
+GROQ_MODEL  = "llama-3.3-70b-versatile"
+GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
 
 def ask_gemini(prompt):
     try:
-        resp = _gc.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        return resp.text.strip()
+        r = requests.post(GROQ_URL,
+            headers={"Authorization": f"Bearer {_GROQ_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": GROQ_MODEL,
+                  "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 300},
+            timeout=30)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"  Gemini 呼叫失敗：{e}")
+        print(f"  Groq 呼叫失敗：{e}")
         return ""
 
 # ── 讀資料（公開 CSV 匯出，不需登入）──────────────────────────

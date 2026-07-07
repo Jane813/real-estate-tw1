@@ -8,10 +8,12 @@ import os, io, json, time
 import urllib.parse
 import requests
 import pandas as pd
-import google.generativeai as genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from datetime import datetime
+
+GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 SHEET_ID = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
 SCOPES   = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -29,21 +31,27 @@ def fetch_sheet(name, nrows=25):
     return pd.read_csv(io.BytesIO(r.content), encoding="utf-8-sig").head(nrows)
 
 
-def ask(model, prompt):
+def ask(groq_key, prompt):
     try:
-        resp = model.generate_content(prompt)
-        time.sleep(2)
-        return resp.text.strip()
+        r = requests.post(GROQ_URL,
+            headers={"Authorization": f"Bearer {groq_key}",
+                     "Content-Type": "application/json"},
+            json={"model": GROQ_MODEL,
+                  "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 200},
+            timeout=30)
+        r.raise_for_status()
+        time.sleep(1)
+        return r.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        log(f"Gemini 錯誤：{e}")
+        log(f"Groq 錯誤：{e}")
         return ""
 
 
 def run():
     log("=== AI 摘要開始 ===")
 
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    groq_key = os.environ["GROQ_API_KEY"]
 
     log("讀取 Google Sheet 資料...")
     try:
@@ -59,31 +67,31 @@ def run():
     summaries = {}
 
     log("產生 Slide 1（整體概況）摘要...")
-    summaries["slide1"] = ask(model,
+    summaries["slide1"] = ask(groq_key,
         f"以下是大台中預售屋最新成交統計：\n{df_overview.to_string(index=False)}\n\n"
         f"{INSTRUCTION}說明整體市場量能與均價水準。"
     )
 
     log("產生 Slide 2（三大排行榜）摘要...")
-    summaries["slide2"] = ask(model,
+    summaries["slide2"] = ask(groq_key,
         f"以下是本期成交量、均單價、均總價前10名建案：\n{df_case.head(10).to_string(index=False)}\n\n"
         f"{INSTRUCTION}點出市場熱點區域與最活躍建案。"
     )
 
     log("產生 Slide 3（行政區分析）摘要...")
-    summaries["slide3"] = ask(model,
+    summaries["slide3"] = ask(groq_key,
         f"以下是各行政區成交筆數與單價統計：\n{df_month.to_string(index=False)}\n\n"
         f"{INSTRUCTION}分析各區冷熱差異與單價高低分布。"
     )
 
     log("產生 Slide 4（建物型態 & 量價）摘要...")
-    summaries["slide4"] = ask(model,
+    summaries["slide4"] = ask(groq_key,
         f"根據以下大台中預售屋成交資料：\n{df_case.head(10).to_string(index=False)}\n\n"
         f"{INSTRUCTION}說明主流建物型態與量價之間的關係。"
     )
 
     log("產生 Slide 5（月度趨勢）摘要...")
-    summaries["slide5"] = ask(model,
+    summaries["slide5"] = ask(groq_key,
         f"以下是大台中預售屋月度成交趨勢：\n{df_trend.to_string(index=False)}\n\n"
         f"{INSTRUCTION}解讀量能趨勢方向與均價走勢。"
     )
