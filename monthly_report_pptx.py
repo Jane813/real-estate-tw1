@@ -237,14 +237,18 @@ s3_t3, s3_d3 = _s3_line(4), _s3_line(5)
 
 # ── Slide 4：建物型態說明 ──────────────────────────────────
 _type_str = "、".join(f"{k}({v}件)" for k, v in type_cnt.items())
+_s4_bubble = "\n".join(
+    f"{r['行政區']}：{int(r['成交筆數'])}件，均單{r['均單']}萬/坪，最高單{r['最高單']}萬/坪"
+    for _, r in ds.head(8).iterrows()
+)
 _s4_prompt = f"""{_base}
-建物型態分佈：{_type_str}
-各行政區量價關係（成交量 vs 均單前5區）：
-{chr(10).join(f"{r['行政區']}：{int(r['成交筆數'])}件，均單{r['均單']}萬/坪" for _, r in ds.head(5).iterrows())}
-請寫出2點市場分析（包含換行共2段，總字數限制80字以內），嚴禁單純報讀數據：
-1. 針對「建物型態」，分析當前市場主流購屋偏好。
-2. 針對「量價分佈」，評估主力交易區的價格接受度或性價比表現。
-請直接輸出這2段文字，不要多餘的問候語。"""
+【左圖：建物型態分佈】{_type_str}
+【右圖：行政區量價氣泡圖（成交量 vs 均單，前8區）】
+{_s4_bubble}
+
+請輸出剛好2段文字（用換行分隔，每段35字以內，嚴禁空白行或多餘說明）：
+第1段：針對右圖，總結本月各行政區成交量與均單的整體分佈特徵，說明哪些區域成交最集中、均單落在什麼區間，呈現本月量價分佈的整體輪廓。
+第2段：針對左圖，說明本月主流建物型態佔比，解讀購屋族群偏好與市場供給結構。"""
 
 s4_obs = ask_gemini(_s4_prompt)
 
@@ -288,11 +292,15 @@ def find(slide, name):
     return None
 
 def fill_tf(shape, text):
-    """填入文字方塊，\\n 對應多段落，保留既有 run 格式。"""
+    """填入文字方塊，\\n 對應多段落，段落不足時自動複製格式新增。"""
     if not shape or not shape.has_text_frame:
         return
+    import copy
+    from pptx.oxml.ns import qn
     tf    = shape.text_frame
     lines = text.split("\n")
+
+    # 填入現有段落
     for i, line in enumerate(lines):
         if i < len(tf.paragraphs):
             para = tf.paragraphs[i]
@@ -300,6 +308,18 @@ def fill_tf(shape, text):
                 para.runs[0].text = line
                 for r in para.runs[1:]:
                     r.text = ""
+        else:
+            # 複製第一個段落的 XML 作為新段落
+            src = tf.paragraphs[0]._p
+            new_p = copy.deepcopy(src)
+            runs = new_p.findall(qn("a:r"))
+            if runs:
+                runs[0].find(qn("a:t")).text = line
+                for r in runs[1:]:
+                    new_p.remove(r)
+            tf._txBody.append(new_p)
+
+    # 清空多餘段落
     for i in range(len(lines), len(tf.paragraphs)):
         for r in tf.paragraphs[i].runs:
             r.text = ""
