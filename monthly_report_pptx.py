@@ -154,7 +154,7 @@ top5       = ds.head(5)["行政區"].tolist()
 months_asc = sorted(df["成交年月"].dropna().unique(), key=m_key)
 
 # ══════════════════════════════════════════════════════════════
-# Gemini AI 文字生成
+# AI 文字生成（優化分析深度版）
 # ══════════════════════════════════════════════════════════════
 print("AI 生成文字摘要...")
 
@@ -182,7 +182,6 @@ _s1_prompt = f"""{_base}
 _s1_raw = ask_gemini(_s1_prompt)
 _s1_lines = [l.strip() for l in _s1_raw.splitlines() if l.strip()]
 def _extract_obs(lines, idx):
-    """從輸出取第 idx 條（0-based），回傳 '標題\n說明' 格式。"""
     title = lines[idx*2]   if idx*2   < len(lines) else f"0{idx+1})觀察{idx+1}"
     desc  = lines[idx*2+1] if idx*2+1 < len(lines) else "（待補充）"
     return f"{title}\n{desc}"
@@ -203,7 +202,9 @@ _s2_prompt = f"""{_base}
 成交量Top3建案：{_cnt_top3}
 最高均單Top3建案：{_unit_top3}
 最高總價Top3建案：{_tot_top3}
-請針對以上三大排行榜寫2句重點觀察（共2句，每句不超過35字，不要編號或標點以外的符號）："""
+請針對以上排行榜進行「深度分析」，嚴禁單純重複建案名稱與數據。
+請點出高價區的聚落效應、豪宅市場動能、或剛需購屋族群的偏好。
+請寫2句重點觀察（共2句，每句不超過35字，嚴禁編號或標點以外的特殊符號）："""
 
 s2_obs = ask_gemini(_s2_prompt)
 
@@ -237,7 +238,9 @@ _s4_prompt = f"""{_base}
 建物型態分佈：{_type_str}
 各行政區量價關係（成交量 vs 均單前5區）：
 {chr(10).join(f"{r['行政區']}：{int(r['成交筆數'])}件，均單{r['均單']}萬/坪" for _, r in ds.head(5).iterrows())}
-請寫1段40字以內的說明，描述本月建物型態特徵與量價分佈重點："""
+請針對「建物型態」與「量價分佈」進行綜合剖析，嚴禁單純報數據。
+請解讀當前市場購屋偏好（如主流房型）、主力交易區的價格支撐力或性價比。
+請寫1段40字以內的深度說明："""
 
 s4_obs = ask_gemini(_s4_prompt)
 
@@ -256,11 +259,13 @@ _s5_prompt = f"""{_base}
 {chr(10).join(_trend_lines)}
 總成交量趨勢：{', '.join(f"{m}:{len(df[df['成交年月']==m])}件" for m in months_asc)}
 
+請根據歷史均單與成交量趨勢進行深度市場剖析，嚴禁單純描述漲跌數字。
+請判斷市場目前處於盤整、冷卻或成長期，並給出未來展望。
 請輸出2段（格式嚴格如下，共4行，不要其他內容）：
 市場判讀標題（6字以內）
-市場判讀說明（40字以內，描述均單趨勢）
+市場判讀說明（40字以內，剖析價格趨勢背後的市場心理或動能）
 本月總結標題（6字以內）
-本月總結說明（40字以內，描述量能與展望）"""
+本月總結說明（40字以內，綜合評估市場現況並給出未來展望）"""
 
 _s5_raw   = ask_gemini(_s5_prompt)
 _s5_lines = [l.strip() for l in _s5_raw.splitlines() if l.strip()]
