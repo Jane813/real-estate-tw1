@@ -52,6 +52,8 @@ jobs:
         run: python main_1.py backfill ${{ github.event.inputs.backfill_season }}
 
       - name: 匯入月度資料
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
           TARGET="${{ github.event.inputs.target_month }}"
           if [ -n "$TARGET" ]; then
