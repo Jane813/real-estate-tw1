@@ -356,11 +356,27 @@ def archive_year_to_sheet(year):
             if check.get("values") and len(check["values"]) >= 2:
                 log(f"[封存] {tab_name} 已有資料，略過（不覆蓋舊封存）")
                 return True
-            log(f"[封存] {tab_name} 存在但無資料，重新寫入...")
+            log(f"[封存] {tab_name} 存在但無資料，擴充行數後重新寫入...")
+            # 取得該分頁的 sheetId 並擴充行數
+            sheet_id = next(
+                s["properties"]["sheetId"] for s in meta["sheets"]
+                if s["properties"]["title"] == tab_name
+            )
+            svc.batchUpdate(spreadsheetId=SHEET_ID, body={"requests": [{
+                "updateSheetProperties": {
+                    "properties": {"sheetId": sheet_id,
+                                   "gridProperties": {"rowCount": len(df) + 200}},
+                    "fields": "gridProperties.rowCount"
+                }
+            }]}).execute()
         else:
-            # 建立新分頁
+            # 建立新分頁（行數 = 資料筆數 + 200 緩衝）
+            row_count = len(df) + 200
             svc.batchUpdate(spreadsheetId=SHEET_ID,
-                body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]}
+                body={"requests": [{"addSheet": {"properties": {
+                    "title": tab_name,
+                    "gridProperties": {"rowCount": row_count, "columnCount": 15}
+                }}}]}
             ).execute()
 
         # 清理資料（移除 NaN、null bytes、特殊字元）
