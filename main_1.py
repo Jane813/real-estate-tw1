@@ -351,12 +351,14 @@ def archive_year_to_sheet(year):
         if tab_name in existing:
             check = svc.values().get(
                 spreadsheetId=SHEET_ID,
-                range=f"'{tab_name}'!A1:A2"
+                range=f"'{tab_name}'!A:A"
             ).execute()
-            if check.get("values") and len(check["values"]) >= 2:
-                log(f"[封存] {tab_name} 已有資料，略過（不覆蓋舊封存）")
+            existing_rows = len(check.get("values", []))
+            expected_rows = len(df) + 1  # 資料 + 標題
+            if existing_rows >= expected_rows:
+                log(f"[封存] {tab_name} 資料完整（{existing_rows} 列），略過")
                 return True
-            log(f"[封存] {tab_name} 存在但無資料，擴充行數後重新寫入...")
+            log(f"[封存] {tab_name} 資料不完整（{existing_rows}/{expected_rows} 列），重新寫入...")
             # 取得該分頁的 sheetId 並擴充行數
             sheet_id = next(
                 s["properties"]["sheetId"] for s in meta["sheets"]
