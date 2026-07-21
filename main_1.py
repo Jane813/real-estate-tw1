@@ -357,15 +357,26 @@ def archive_year_to_sheet(year):
             body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]}
         ).execute()
 
-        # 寫入標題列 + 資料
+        # 清理資料（移除 NaN、null bytes、特殊字元）
+        df = df.fillna("").astype(str)
+        df = df.apply(lambda col: col.str.replace("\x00", "", regex=False)
+                                      .str.replace(r"[\x01-\x1f]", "", regex=True))
+
         header = [df.columns.tolist()]
-        rows   = df.astype(str).values.tolist()
-        svc.values().update(
-            spreadsheetId=SHEET_ID,
-            range=f"'{tab_name}'!A1",
-            valueInputOption="RAW",
-            body={"values": header + rows}
-        ).execute()
+        rows   = df.values.tolist()
+        all_rows = header + rows
+
+        # 分批寫入（每批 500 列避免 payload 過大）
+        BATCH = 500
+        for i in range(0, len(all_rows), BATCH):
+            chunk = all_rows[i:i + BATCH]
+            start_row = i + 1
+            svc.values().update(
+                spreadsheetId=SHEET_ID,
+                range=f"'{tab_name}'!A{start_row}",
+                valueInputOption="RAW",
+                body={"values": chunk}
+            ).execute()
 
         log(f"[封存] ✓ {year} 年 {len(df)} 筆已封存至「{tab_name}」")
         return True
