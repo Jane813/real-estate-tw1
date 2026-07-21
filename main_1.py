@@ -12,6 +12,7 @@ import requests
 import zipfile
 import os
 import sqlite3
+import json
 import pandas as pd
 import calendar
 from datetime import datetime
@@ -302,12 +303,99 @@ def save_to_db(df, ym, season_code, source):
     return inserted
 
 
+# ── 年度封存到 Google Sheet ──────────────────────────────
+
+SHEET_ID = "1pN9_h5Pqe6CewXs8WPULSNpW8tXUKj1h8nZgMneu4HE"
+SCOPES   = ["https://www.googleapis.com/auth/spreadsheets"]
+
+def archive_year_to_sheet(year):
+    """把指定年度資料封存到 Google Sheet「YYYY年封存」分頁"""
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+    if not creds_json:
+        log(f"[封存] 未設定 GOOGLE_CREDENTIALS，略過 {year} 年封存")
+        return False
+
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        log("[封存] 缺少 google-auth 套件，略過封存")
+        return False
+
+    # 讀取該年度所有資料
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql(
+        "SELECT 年月,鄉鎮市區,交易標的,建案名稱,建物型態,總價元,"
+        "單價元平方公尺,建物移轉總面積平方公尺,屋齡,交易年月日 "
+        "FROM presale WHERE 年月 LIKE ? ORDER BY 年月,鄉鎮市區",
+        conn, params=(f"{year}-%",)
+    )
+    conn.close()
+
+    if df.empty:
+        log(f"[封存] {year} 年無資料，略過")
+        return False
+
+    log(f"[封存] {year} 年共 {len(df)} 筆，寫入 Google Sheet...")
+
+    try:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(creds_json), scopes=SCOPES)
+        svc = build("sheets", "v4", credentials=creds).spreadsheets()
+
+        tab_name = f"{year}年封存"
+
+        # 若分頁已存在則略過（不覆蓋）
+        meta = svc.get(spreadsheetId=SHEET_ID).execute()
+        existing = {s["properties"]["title"] for s in meta["sheets"]}
+        if tab_name in existing:
+            log(f"[封存] {tab_name} 已存在，略過（不覆蓋舊封存）")
+            return True
+
+        # 建立新分頁
+        svc.batchUpdate(spreadsheetId=SHEET_ID,
+            body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]}
+        ).execute()
+
+        # 寫入標題列 + 資料
+        header = [df.columns.tolist()]
+        rows   = df.astype(str).values.tolist()
+        svc.values().update(
+            spreadsheetId=SHEET_ID,
+            range=f"'{tab_name}'!A1",
+            valueInputOption="RAW",
+            body={"values": header + rows}
+        ).execute()
+
+        log(f"[封存] ✓ {year} 年 {len(df)} 筆已封存至「{tab_name}」")
+        return True
+
+    except Exception as e:
+        log(f"[封存] 失敗：{e}")
+        return False
+
+
 # ── 清理舊資料 ───────────────────────────────────────────
 
 def cleanup_old_data(months_keep=None):
-    """保留當年度所有月份資料，移除跨年舊資料（前一年度以前）"""
+    """封存前一年度資料到 Google Sheet，再從 DB 移除"""
     current_year = datetime.now().year
-    cutoff = f"{current_year}-01"   # 當年 1 月以前的才刪
+    cutoff = f"{current_year}-01"
+
+    # 找出 DB 裡有哪些舊年度需要封存
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    old_years = c.execute(
+        "SELECT DISTINCT substr(年月,1,4) FROM presale "
+        "WHERE 年月 IS NOT NULL AND 年月 != '' AND 年月 < ?",
+        (cutoff,)
+    ).fetchall()
+    conn.close()
+
+    for (yr_str,) in old_years:
+        archive_year_to_sheet(int(yr_str))
+
+    # 封存完成後再刪除
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
