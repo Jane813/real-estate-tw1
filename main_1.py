@@ -345,17 +345,23 @@ def archive_year_to_sheet(year):
 
         tab_name = f"{year}年封存"
 
-        # 若分頁已存在則略過（不覆蓋）
+        # 若分頁已存在，檢查是否有資料
         meta = svc.get(spreadsheetId=SHEET_ID).execute()
         existing = {s["properties"]["title"] for s in meta["sheets"]}
         if tab_name in existing:
-            log(f"[封存] {tab_name} 已存在，略過（不覆蓋舊封存）")
-            return True
-
-        # 建立新分頁
-        svc.batchUpdate(spreadsheetId=SHEET_ID,
-            body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]}
-        ).execute()
+            check = svc.values().get(
+                spreadsheetId=SHEET_ID,
+                range=f"'{tab_name}'!A1:A2"
+            ).execute()
+            if check.get("values") and len(check["values"]) >= 2:
+                log(f"[封存] {tab_name} 已有資料，略過（不覆蓋舊封存）")
+                return True
+            log(f"[封存] {tab_name} 存在但無資料，重新寫入...")
+        else:
+            # 建立新分頁
+            svc.batchUpdate(spreadsheetId=SHEET_ID,
+                body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]}
+            ).execute()
 
         # 清理資料（移除 NaN、null bytes、特殊字元）
         df = df.fillna("").astype(str)
