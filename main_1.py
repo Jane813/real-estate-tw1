@@ -283,7 +283,7 @@ def save_to_db(df, ym, season_code, source):
                 row.get("建物移轉總面積平方公尺", None),
                 row.get("屋齡", None),
                 str(row.get("交易年月日", "")),
-                str(row.get("建案名稱", "")),
+                str(row.get("建案名稱", "")).replace("?", "").strip(),
                 now_str
             ))
             if c.rowcount > 0:

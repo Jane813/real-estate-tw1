@@ -179,10 +179,10 @@ def load_data():
         if "年月" not in df.columns or df["年月"].isna().all():
             df["年月"] = df["交易年月日"].apply(_roc_to_ym)
 
-        # 建案名稱含 ? 代表編碼問題，清空
+        # 建案名稱含 ? 代表編碼問題，移除問號保留其餘文字
         if "建案名稱" in df.columns:
             df["建案名稱"] = df["建案名稱"].apply(
-                lambda x: "" if "?" in str(x) else x)
+                lambda x: str(x).replace("?", "").strip() if "?" in str(x) else x)
 
     return df, log_df
 
