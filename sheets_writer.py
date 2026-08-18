@@ -33,7 +33,8 @@ TAICHUNG_DISTRICTS = [
     "太平區", "大里區", "和平區"
 ]
 
-FIXED_SHEETS = ["總覽摘要", "預售屋總表", "月度統計摘要", "各區建案統計摘要", "月度趨勢"]
+FIXED_SHEETS = ["總覽摘要", "預售屋總表", "月度統計摘要", "各區建案統計摘要", "月度趨勢",
+                "成屋總表", "成屋月度統計"]
 
 
 def log(msg):
@@ -185,6 +186,43 @@ def load_data():
                 lambda x: str(x).replace("?", "").strip() if "?" in str(x) else x)
 
     return df, log_df
+
+
+def load_sale_data():
+    """從 DB 讀取成屋資料，計算屋齡"""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        df = pd.read_sql(
+            "SELECT 年月, 鄉鎮市區, 交易標的, 建物型態, 主要用途, 建築完成年月, "
+            "建物移轉總面積平方公尺, 總價元, 單價元平方公尺, 交易年月日, "
+            "移轉層次, 總樓層數 FROM sale ORDER BY 年月, 鄉鎮市區",
+            conn
+        )
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
+
+    if df.empty:
+        return df
+
+    # 計算屋齡（建築完成年月為民國格式 YYYMMDD）
+    current_roc_year = datetime.now().year - 1911
+    def calc_age(val):
+        try:
+            s = str(val).strip().replace("/", "").replace("-", "")
+            if len(s) >= 3 and s != "nan":
+                build_roc_y = int(s[:3])
+                return current_roc_year - build_roc_y
+        except Exception:
+            pass
+        return ""
+    df["屋齡"] = df["建築完成年月"].apply(calc_age)
+
+    # 萬元換算
+    df["總價萬"] = pd.to_numeric(df["總價元"], errors="coerce").div(10000).round(1)
+    df["單價萬坪"] = pd.to_numeric(df["單價元平方公尺"], errors="coerce").mul(3.3058).div(10000).round(1)
+
+    return df
 
 
 # ── 各 Sheet 資料準備 ────────────────────────────────────
@@ -429,6 +467,57 @@ def build_district(df, dist):
     return rows
 
 
+def build_sale_raw(df_sale):
+    """成屋總表：原始資料"""
+    rows = [["大台中成屋（不動產買賣）總表"],
+            ["年月", "鄉鎮市區", "交易標的", "建物型態", "主要用途",
+             "屋齡", "坪數", "總價（萬）", "單價（萬/坪）", "移轉層次", "總樓層數", "交易年月日"]]
+    if df_sale.empty:
+        rows.append(["（尚無成屋資料）"])
+        return rows
+    cols = ["年月", "鄉鎮市區", "交易標的", "建物型態", "主要用途",
+            "屋齡", "面積坪", "總價萬", "單價萬坪", "移轉層次", "總樓層數", "交易年月日"]
+    df_sale = df_sale.copy()
+    if "建物移轉總面積平方公尺" in df_sale.columns:
+        df_sale["面積坪"] = pd.to_numeric(
+            df_sale["建物移轉總面積平方公尺"], errors="coerce").mul(0.3025).round(1)
+    available = [c for c in cols if c in df_sale.columns]
+    out = df_sale[available].fillna("").astype(str)
+    for _, r in out.iterrows():
+        rows.append(r.tolist())
+    return rows
+
+
+def build_sale_month_summary(df_sale):
+    """成屋月度統計：按年月 × 行政區彙整"""
+    rows = [["成屋月度統計摘要"],
+            ["年月", "鄉鎮市區", "成交筆數", "均單（萬/坪）", "中位單（萬/坪）",
+             "均總（萬）", "均屋齡（年）"]]
+    if df_sale.empty:
+        rows.append(["（尚無成屋資料）"])
+        return rows
+    df = df_sale.copy()
+    df["單價萬坪_n"] = pd.to_numeric(df.get("單價萬坪", pd.Series(dtype=float)), errors="coerce")
+    df["總價萬_n"]   = pd.to_numeric(df.get("總價萬",   pd.Series(dtype=float)), errors="coerce")
+    df["屋齡_n"]     = pd.to_numeric(df.get("屋齡",     pd.Series(dtype=float)), errors="coerce")
+    grp = df.groupby(["年月", "鄉鎮市區"]).agg(
+        筆數=("總價萬_n", "count"),
+        均單=("單價萬坪_n", "mean"),
+        中位單=("單價萬坪_n", "median"),
+        均總=("總價萬_n", "mean"),
+        均屋齡=("屋齡_n", "mean"),
+    ).reset_index().sort_values(["年月", "鄉鎮市區"], ascending=[False, True])
+    for _, r in grp.iterrows():
+        rows.append([
+            str(r["年月"]), str(r["鄉鎮市區"]), int(r["筆數"]),
+            round(r["均單"], 1) if pd.notna(r["均單"]) else "",
+            round(r["中位單"], 1) if pd.notna(r["中位單"]) else "",
+            round(r["均總"], 0) if pd.notna(r["均總"]) else "",
+            round(r["均屋齡"], 1) if pd.notna(r["均屋齡"]) else "",
+        ])
+    return rows
+
+
 # ── 主程式 ────────────────────────────────────────────────
 
 def run():
@@ -446,6 +535,9 @@ def run():
     existing = ensure_all_sheets(sheets, all_titles, existing)
     batch_clear(sheets, all_titles)  # 所有區分頁一律清空，無資料的留白
 
+    df_sale = load_sale_data()
+    log(f"成屋資料：{len(df_sale):,} 筆")
+
     log("準備資料中...")
     data_map = {
         "總覽摘要":         build_summary(df, log_df),
@@ -453,6 +545,8 @@ def run():
         "月度統計摘要":     build_month_summary(df),
         "各區建案統計摘要": build_case_summary(df),
         "月度趨勢":         build_monthly_trend(df),
+        "成屋總表":         build_sale_raw(df_sale),
+        "成屋月度統計":     build_sale_month_summary(df_sale),
     }
     for dist in actual_districts:
         data_map[dist] = build_district(df, dist)

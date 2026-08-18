@@ -44,6 +44,21 @@ PRE_COLS = {
     "建案名稱": "建案名稱"
 }
 
+SALE_COLS = {
+    "鄉鎮市區": "鄉鎮市區",
+    "交易標的": "交易標的",
+    "土地位置建物門牌": "門牌",
+    "建物型態": "建物型態",
+    "主要用途": "主要用途",
+    "建築完成年月": "建築完成年月",
+    "建物移轉總面積平方公尺": "建物移轉總面積平方公尺",
+    "總價元": "總價元",
+    "單價元平方公尺": "單價元平方公尺",
+    "交易年月日": "交易年月日",
+    "移轉層次": "移轉層次",
+    "總樓層數": "總樓層數",
+}
+
 
 def log(msg):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -76,6 +91,22 @@ def init_database():
             log(f"已新增欄位：{col}")
         except Exception:
             pass
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sale (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            年月 TEXT,
+            資料來源 TEXT DEFAULT 'XLS',
+            縣市 TEXT DEFAULT '臺中市',
+            鄉鎮市區 TEXT, 交易標的 TEXT,
+            門牌 TEXT, 建物型態 TEXT, 主要用途 TEXT,
+            建築完成年月 TEXT,
+            總價元 REAL, 單價元平方公尺 REAL,
+            建物移轉總面積平方公尺 REAL,
+            交易年月日 TEXT, 移轉層次 TEXT, 總樓層數 TEXT,
+            匯入時間 TEXT,
+            UNIQUE(門牌, 交易年月日, 總價元)
+        )
+    """)
     c.execute("""
         CREATE TABLE IF NOT EXISTS month_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -257,6 +288,54 @@ def read_csv(folder, date_start, date_end):
     return pd.DataFrame()
 
 
+def read_xls_sale(folder, date_start, date_end):
+    xls_path = os.path.join(folder, "b_lvr_land_a.xls")
+    if not os.path.exists(xls_path):
+        return pd.DataFrame()
+    try:
+        df = pd.read_excel(xls_path, header=0, skiprows=[1], engine="xlrd")
+        log(f"[XLS-成屋] 共 {len(df)} 筆，篩選中...")
+        return _filter_taichung_sale(df, date_start, date_end)
+    except Exception as e:
+        log(f"[XLS-成屋] 讀取失敗：{e}")
+        return pd.DataFrame()
+
+
+def read_csv_sale(folder, date_start, date_end):
+    target = None
+    for fname in os.listdir(folder):
+        if fname.lower() == "b_lvr_land_a.csv":
+            target = os.path.join(folder, fname)
+            break
+    if not target:
+        return pd.DataFrame()
+    for skip in [0, 1, 2]:
+        try:
+            df = pd.read_csv(target, encoding="utf-8-sig",
+                             skiprows=skip, low_memory=False)
+            if any(c in df.columns for c in ["鄉鎮市區", "總價元"]) and len(df) > 0:
+                log(f"[CSV-成屋] 共 {len(df)} 筆，篩選中...")
+                return _filter_taichung_sale(df, date_start, date_end)
+        except Exception:
+            pass
+    return pd.DataFrame()
+
+
+def _filter_taichung_sale(df, date_start, date_end):
+    cleaned = pd.DataFrame()
+    for orig, new in SALE_COLS.items():
+        cleaned[new] = df[orig] if orig in df.columns else ""
+    cleaned = cleaned[pd.to_numeric(cleaned["總價元"], errors="coerce").notna()].copy()
+    cleaned = cleaned[cleaned["鄉鎮市區"].astype(str).str.contains(
+        "|".join(TAICHUNG_DISTRICTS), na=False
+    )].copy()
+    cleaned["_d"] = cleaned["交易年月日"].apply(_parse_date_int)
+    cleaned = cleaned[(cleaned["_d"] >= date_start) & (cleaned["_d"] <= date_end)].copy()
+    cleaned = cleaned.drop(columns=["_d"])
+    log(f"  [成屋] 日期 {date_start}～{date_end}：{len(cleaned)} 筆")
+    return cleaned
+
+
 # ── 寫入資料庫 ───────────────────────────────────────────
 
 def save_to_db(df, ym, season_code, source):
@@ -306,6 +385,71 @@ def save_to_db(df, ym, season_code, source):
     conn.close()
     log(f"  {ym}：新增 {inserted} 筆，資料庫累積 {total} 筆")
     return inserted
+
+
+def save_to_db_sale(df, ym, season_code, source):
+    if df.empty:
+        return 0
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    inserted = 0
+    for _, row in df.iterrows():
+        try:
+            c.execute("""
+                INSERT OR IGNORE INTO sale
+                (年月, 資料來源, 縣市, 鄉鎮市區, 交易標的, 門牌, 建物型態, 主要用途,
+                 建築完成年月, 總價元, 單價元平方公尺, 建物移轉總面積平方公尺,
+                 交易年月日, 移轉層次, 總樓層數, 匯入時間)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                ym, source, "臺中市",
+                str(row.get("鄉鎮市區", "")),
+                str(row.get("交易標的", "")),
+                str(row.get("門牌", "")),
+                str(row.get("建物型態", "")),
+                str(row.get("主要用途", "")),
+                str(row.get("建築完成年月", "")),
+                row.get("總價元", None),
+                row.get("單價元平方公尺", None),
+                row.get("建物移轉總面積平方公尺", None),
+                str(row.get("交易年月日", "")),
+                str(row.get("移轉層次", "")),
+                str(row.get("總樓層數", "")),
+                now_str
+            ))
+            if c.rowcount > 0:
+                inserted += 1
+        except Exception:
+            pass
+    total = c.execute("SELECT COUNT(*) FROM sale").fetchone()[0]
+    conn.commit()
+    conn.close()
+    log(f"  [成屋] {ym}：新增 {inserted} 筆，成屋累積 {total} 筆")
+    return inserted
+
+
+def _try_csv_for_month_sale(ym, year_ad, month, d_start, d_end, season_code):
+    """成屋申報約 30 天，試本季（+0）和下一季（+1）"""
+    from datetime import datetime as _dt
+    seasons_to_try = []
+    seen = set()
+    for offset in [0, 1]:
+        sub = _dt(year_ad, month, 1) + relativedelta(months=offset)
+        s = get_season_code(sub.year, sub.month)
+        if s not in seen:
+            seen.add(s)
+            seasons_to_try.append(s)
+    total = 0
+    for csv_s in seasons_to_try:
+        zip_csv = download_season_csv(csv_s)
+        if not zip_csv:
+            continue
+        folder_csv = extract_zip(zip_csv, csv_s)
+        df_csv = read_csv_sale(folder_csv, d_start, d_end)
+        if not df_csv.empty:
+            total += save_to_db_sale(df_csv, ym, csv_s, "CSV")
+    return total
 
 
 # ── 年度封存到 Google Sheet ──────────────────────────────
@@ -509,20 +653,28 @@ def run_import_month(ym):
     csv_season = get_season_code(submission.year, submission.month)
     log(f"=== 匯入指定月份：{ym}（交易季：{season_code}，CSV季：{csv_season}）===")
 
-    # 先試 XLS
+    # 先試 XLS（預售屋 + 成屋）
     inserted = 0
+    inserted_sale = 0
     zip_path = download_xls()
     if zip_path:
         folder = extract_zip(zip_path, "opendata")
-        log(f"--- {ym}（XLS）---")
+        log(f"--- {ym}（XLS 預售屋）---")
         df = read_xls(folder, d_start, d_end)
         if not df.empty:
             inserted = save_to_db(df, ym, season_code, "XLS")
+        log(f"--- {ym}（XLS 成屋）---")
+        df_s = read_xls_sale(folder, d_start, d_end)
+        if not df_s.empty:
+            inserted_sale = save_to_db_sale(df_s, ym, season_code, "XLS")
 
-    # XLS 無此月資料，同時試「交易季」和「申報季（+2月）」CSV 補匯
+    # XLS 無資料時 CSV 補匯
     if inserted == 0:
-        log(f"XLS 無 {ym} 資料，改用 CSV 補匯（試交易季 + 申報季）...")
+        log(f"XLS 無 {ym} 預售屋資料，改用 CSV 補匯（試交易季 + 申報季）...")
         _try_csv_for_month(ym, year_ad, month, d_start, d_end, season_code)
+    if inserted_sale == 0:
+        log(f"XLS 無 {ym} 成屋資料，改用 CSV 補匯（試本季 + 下一季）...")
+        _try_csv_for_month_sale(ym, year_ad, month, d_start, d_end, season_code)
 
     log(f"=== {ym} 匯入完成 ===")
 
@@ -550,15 +702,21 @@ def run_import(months_back=3):
         log(f"--- {ym} ---")
 
         inserted = 0
+        inserted_sale = 0
         if folder:
             df = read_xls(folder, d_start, d_end)
             if not df.empty:
                 inserted = save_to_db(df, ym, season_code, "XLS")
+            df_s = read_xls_sale(folder, d_start, d_end)
+            if not df_s.empty:
+                inserted_sale = save_to_db_sale(df_s, ym, season_code, "XLS")
 
-        # XLS 無此月資料，同時試「交易季」和「申報季（+2月）」CSV 補匯
         if inserted == 0:
-            log(f"  XLS 無 {ym} 資料，改用 CSV 補匯（試交易季 + 申報季）...")
+            log(f"  XLS 無 {ym} 預售屋資料，改用 CSV 補匯（試交易季 + 申報季）...")
             _try_csv_for_month(ym, t.year, t.month, d_start, d_end, season_code)
+        if inserted_sale == 0:
+            log(f"  XLS 無 {ym} 成屋資料，改用 CSV 補匯（試本季 + 下一季）...")
+            _try_csv_for_month_sale(ym, t.year, t.month, d_start, d_end, season_code)
 
     cleanup_old_data()
     log("=== 匯入完成 ===")
@@ -587,6 +745,8 @@ def run_backfill(season_code):
         log(f"--- {ym} ---")
         df = read_csv(folder, d_start, d_end)
         save_to_db(df, ym, season_code, "CSV")
+        df_s = read_csv_sale(folder, d_start, d_end)
+        save_to_db_sale(df_s, ym, season_code, "CSV")
 
     log(f"=== {season_code} 補匯完成 ===")
 
