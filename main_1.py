@@ -135,7 +135,15 @@ def download_xls():
 
 
 def download_season_csv(season_code):
-    """備用：下載季度歸檔 CSV（季度結束後才有）"""
+    """備用：下載季度歸檔 CSV（季度結束後才有）。同一執行期間重複呼叫直接用快取。"""
+    os.makedirs(DATA_FOLDER, exist_ok=True)
+    path = os.path.join(DATA_FOLDER, f"{season_code}.zip")
+
+    # 同一次執行已下載過，直接用快取
+    if os.path.exists(path) and os.path.getsize(path) > 50000:
+        log(f"[CSV] 使用快取：{season_code}")
+        return path
+
     session = requests.Session()
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -143,7 +151,6 @@ def download_season_csv(season_code):
     }
     log(f"[CSV] 下載季度歸檔 {season_code}...")
 
-    # 先嘗試取 cookie（失敗也繼續，不中斷）
     try:
         session.get("https://plvr.land.moi.gov.tw/DownloadOpenData",
                     headers=headers, timeout=30)
@@ -157,8 +164,6 @@ def download_season_csv(season_code):
             headers=headers, timeout=300
         )
         if r.status_code == 200 and len(r.content) > 50000:
-            os.makedirs(DATA_FOLDER, exist_ok=True)
-            path = os.path.join(DATA_FOLDER, f"{season_code}.zip")
             with open(path, "wb") as f:
                 f.write(r.content)
             log(f"[CSV] 下載完成（{len(r.content)//1024} KB）")
@@ -451,6 +456,38 @@ def cleanup_old_data(months_keep=None):
 
 # ── 主流程 ───────────────────────────────────────────────
 
+def _try_csv_for_month(ym, year_ad, month, d_start, d_end, season_code):
+    """
+    嘗試多個季度 CSV 補匯同一個月的資料。
+    預售屋申報期限 30 天，實際落點可能在「交易季」或「交易月+2月季」，
+    兩個都試、用 INSERT OR IGNORE 去除重複，確保不漏資料。
+    """
+    from datetime import datetime as _dt
+    seasons_to_try = []
+    seen = set()
+    for offset in [0, 2]:
+        sub = _dt(year_ad, month, 1) + relativedelta(months=offset)
+        s = get_season_code(sub.year, sub.month)
+        if s not in seen:
+            seen.add(s)
+            seasons_to_try.append(s)
+
+    total = 0
+    for csv_s in seasons_to_try:
+        zip_csv = download_season_csv(csv_s)
+        if not zip_csv:
+            log(f"  CSV（{csv_s}）無法取得，略過")
+            continue
+        folder_csv = extract_zip(zip_csv, csv_s)
+        df_csv = read_csv(folder_csv, d_start, d_end)
+        if not df_csv.empty:
+            n = save_to_db(df_csv, ym, csv_s, "CSV")
+            total += n
+        else:
+            log(f"  CSV（{csv_s}）無 {ym} 資料")
+    return total
+
+
 def run_import_month(ym):
     """
     匯入指定年月（格式：YYYY-MM）。
@@ -482,17 +519,10 @@ def run_import_month(ym):
         if not df.empty:
             inserted = save_to_db(df, ym, season_code, "XLS")
 
-    # XLS 無此月資料，用「申報季度」CSV 補匯
+    # XLS 無此月資料，同時試「交易季」和「申報季（+2月）」CSV 補匯
     if inserted == 0:
-        log(f"XLS 無 {ym} 資料，改用申報季度 CSV（{csv_season}）補匯...")
-        zip_csv = download_season_csv(csv_season)
-        if zip_csv:
-            folder_csv = extract_zip(zip_csv, csv_season)
-            log(f"--- {ym}（CSV {csv_season}）---")
-            df_csv = read_csv(folder_csv, d_start, d_end)
-            save_to_db(df_csv, ym, csv_season, "CSV")
-        else:
-            log(f"季度 CSV（{csv_season}）下載失敗，{ym} 無資料可匯入")
+        log(f"XLS 無 {ym} 資料，改用 CSV 補匯（試交易季 + 申報季）...")
+        _try_csv_for_month(ym, year_ad, month, d_start, d_end, season_code)
 
     log(f"=== {ym} 匯入完成 ===")
 
@@ -525,18 +555,10 @@ def run_import(months_back=3):
             if not df.empty:
                 inserted = save_to_db(df, ym, season_code, "XLS")
 
-        # XLS 無此月資料，自動用申報季度 CSV 補匯
+        # XLS 無此月資料，同時試「交易季」和「申報季（+2月）」CSV 補匯
         if inserted == 0:
-            submission = t + relativedelta(months=2)
-            csv_season = get_season_code(submission.year, submission.month)
-            log(f"  XLS 無 {ym} 資料，改試 CSV（{csv_season}）...")
-            zip_csv = download_season_csv(csv_season)
-            if zip_csv:
-                folder_csv = extract_zip(zip_csv, csv_season)
-                df_csv = read_csv(folder_csv, d_start, d_end)
-                save_to_db(df_csv, ym, csv_season, "CSV")
-            else:
-                log(f"  CSV（{csv_season}）也無法取得，{ym} 暫無資料")
+            log(f"  XLS 無 {ym} 資料，改用 CSV 補匯（試交易季 + 申報季）...")
+            _try_csv_for_month(ym, t.year, t.month, d_start, d_end, season_code)
 
     cleanup_old_data()
     log("=== 匯入完成 ===")
