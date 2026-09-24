@@ -394,10 +394,14 @@ async def main():
         )
         page = await context.new_page()
 
-        # 登入（優先用 cookie，沒有才輸入帳密）
+        # 登入（優先用 cookie；有 cookie 就直接繼續，不 fallback 密碼登入）
         cookie_loaded = await load_cookies(context)
-        if cookie_loaded and await is_logged_in(page):
-            print("  使用已儲存的登入狀態")
+        if cookie_loaded:
+            logged_in = await is_logged_in(page)
+            if logged_in:
+                print("  使用已儲存的登入狀態")
+            else:
+                print("  Cookie 已載入，繼續執行（headless 可能無法驗證登入狀態）")
         else:
             await login(page, context)
 
