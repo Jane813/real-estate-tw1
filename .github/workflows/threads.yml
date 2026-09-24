@@ -1,0 +1,71 @@
+name: Threads 輿情爬蟲
+
+on:
+  schedule:
+    - cron: '0 2 * * *'    # 每天 UTC 02:00（台灣時間 10:00）
+  workflow_dispatch:        # 手動觸發
+
+jobs:
+  threads-crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝必要套件
+        run: pip install playwright pandas google-auth google-api-python-client
+
+      - name: 安裝 Playwright 瀏覽器
+        run: playwright install chromium --with-deps
+
+      - name: 還原資料庫
+        uses: actions/cache@v4
+        with:
+          path: real_estate.db
+          key: real-estate-db-${{ github.run_id }}
+          restore-keys: real-estate-db-
+
+      - name: 初始化資料庫
+        run: python -c "from main_1 import init_database; init_database()"
+
+      - name: 還原 Threads Cookie（若有）
+        uses: actions/cache@v4
+        with:
+          path: threads_cookies.json
+          key: threads-cookies-${{ github.run_id }}
+          restore-keys: threads-cookies-
+
+      - name: 執行 Threads 爬蟲
+        env:
+          THREADS_USERNAME: ${{ secrets.THREADS_USERNAME }}
+          THREADS_PASSWORD: ${{ secrets.THREADS_PASSWORD }}
+        run: python threads_crawler.py
+
+      - name: 寫入 Google Sheet
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python sheets_writer.py
+
+      - name: 儲存資料庫
+        uses: actions/cache/save@v4
+        with:
+          path: real_estate.db
+          key: real-estate-db-${{ github.run_id }}
+
+      - name: 儲存 Threads Cookie
+        uses: actions/cache/save@v4
+        with:
+          path: threads_cookies.json
+          key: threads-cookies-${{ github.run_id }}
+
+      - name: 備份資料庫（artifact）
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-estate-db-threads
+          path: real_estate.db
+          retention-days: 7

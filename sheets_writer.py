@@ -4,6 +4,7 @@ Google Sheet 寫入器（月報版）
 - 搭配 main_1.py 使用
 """
 
+import re
 import sqlite3
 import json
 import os
@@ -34,7 +35,7 @@ TAICHUNG_DISTRICTS = [
 ]
 
 FIXED_SHEETS = ["總覽摘要", "預售屋總表", "月度統計摘要", "各區建案統計摘要", "月度趨勢",
-                "成屋總表", "成屋月度統計"]
+                "成屋總表", "成屋月度統計", "2018-2025成交資料", "Threads輿情"]
 
 
 def log(msg):
@@ -115,8 +116,8 @@ def batch_clear(sheets, titles):
 
 def batch_write(sheets, data_map):
     items = list(data_map.items())
-    for i in range(0, len(items), 10):
-        chunk = items[i:i+10]
+    for i in range(0, len(items), 5):
+        chunk = items[i:i+5]
         value_ranges = [
             {"range": f"'{title}'!A1", "values": clean_rows(rows)}
             for title, rows in chunk if rows
@@ -127,7 +128,7 @@ def batch_write(sheets, data_map):
             spreadsheetId=SPREADSHEET_ID,
             body={"valueInputOption": "RAW", "data": value_ranges}
         ).execute)
-        log(f"  批次寫入 {len(value_ranges)} 個 sheet（第 {i//10+1} 批）")
+        log(f"  批次寫入 {len(value_ranges)} 個 sheet（第 {i//5+1} 批）")
 
 
 # ── 資料載入 ─────────────────────────────────────────────
@@ -183,9 +184,77 @@ def load_data():
         # 建案名稱含 ? 代表編碼問題，移除問號保留其餘文字
         if "建案名稱" in df.columns:
             df["建案名稱"] = df["建案名稱"].apply(
-                lambda x: str(x).replace("?", "").strip() if "?" in str(x) else x)
+                lambda x: re.sub(r'[?-�]', '', str(x)).strip())
 
     return df, log_df
+
+
+def _normalize_addr(addr):
+    """地址標準化：全形轉半形、取到門牌號碼止，去除樓層後綴"""
+    s = str(addr).strip()
+    s = s.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+    m = re.search(r'\d+號', s)
+    return s[:m.end()] if m else s
+
+
+def _street_key(addr):
+    """取路段名稱（第一個數字前），例：臺中市北屯區光復路三段"""
+    s = str(addr).strip()
+    s = s.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+    m = re.search(r'\d', s)
+    return s[:m.start()].rstrip() if m else s
+
+
+def build_address_name_lookup(df_presale):
+    """從預售屋資料＋歷史資料建立兩層地址→建案名稱對照表
+    回傳 (exact_lookup, street_lookup)：
+      exact_lookup：精確比對（取到號碼）
+      street_lookup：路名模糊比對（該路只有一個建案才納入）
+    """
+    exact_lookup = {}
+    street_index = {}   # street_key → set(建案名稱)
+
+    def _add_from_rows(rows):
+        for addr, name in rows:
+            name = str(name).strip()
+            if not name or name == "nan":
+                continue
+            key = _normalize_addr(addr)
+            if key:
+                exact_lookup[key] = name
+            sk = _street_key(addr)
+            if sk:
+                street_index.setdefault(sk, set()).add(name)
+
+    if not df_presale.empty and "門牌" in df_presale.columns and "建案名稱" in df_presale.columns:
+        _add_from_rows(df_presale[["門牌", "建案名稱"]].values.tolist())
+
+    # 從 presale_history 補充歷史地址對照
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        hist_rows = conn.execute(
+            "SELECT 門牌, 建案名稱 FROM presale_history WHERE 門牌 != '' AND 建案名稱 != ''"
+        ).fetchall()
+        conn.close()
+        _add_from_rows(hist_rows)
+        log(f"歷史地址對照：{len(hist_rows)} 筆，精確 lookup {len(exact_lookup)} 組")
+    except Exception as e:
+        log(f"presale_history 讀取失敗（略過）：{e}")
+
+    # 路名唯一建案才納入模糊 lookup（多個建案的路名跳過，避免貼錯名）
+    street_lookup = {sk: list(names)[0] for sk, names in street_index.items() if len(names) == 1}
+    log(f"路名模糊 lookup：{len(street_lookup)} 條路（唯一建案）")
+
+    return exact_lookup, street_lookup
+
+
+def _lookup_name(addr, exact_lookup, street_lookup):
+    """兩段式地址查詢：先精確比對，再路名模糊比對"""
+    key = _normalize_addr(addr)
+    if key in exact_lookup:
+        return exact_lookup[key]
+    sk = _street_key(addr)
+    return street_lookup.get(sk, "")
 
 
 def load_sale_data():
@@ -194,7 +263,7 @@ def load_sale_data():
     try:
         df = pd.read_sql(
             "SELECT 年月, 鄉鎮市區, 交易標的, 建物型態, 主要用途, 建築完成年月, "
-            "建物移轉總面積平方公尺, 總價元, 單價元平方公尺, 交易年月日, "
+            "門牌, 建物移轉總面積平方公尺, 總價元, 單價元平方公尺, 交易年月日, "
             "移轉層次, 總樓層數 FROM sale ORDER BY 年月, 鄉鎮市區",
             conn
         )
@@ -209,10 +278,18 @@ def load_sale_data():
     current_roc_year = datetime.now().year - 1911
     def calc_age(val):
         try:
-            s = str(val).strip().replace("/", "").replace("-", "")
-            if len(s) >= 3 and s != "nan":
+            s = str(val).strip().replace("/", "").replace("-", "").split(".")[0]
+            if s in ("", "nan", "0"):
+                return ""
+            # 民國 YYYMMDD：7 位 = 3 位年（100 年後）；6 位 = 2 位年（99 年以前，前導零已去除）
+            if len(s) == 7:
                 build_roc_y = int(s[:3])
-                return current_roc_year - build_roc_y
+            elif len(s) == 6:
+                build_roc_y = int(s[:2])
+            else:
+                return ""
+            age = current_roc_year - build_roc_y
+            return age if age >= 0 else ""
         except Exception:
             pass
         return ""
@@ -467,20 +544,63 @@ def build_district(df, dist):
     return rows
 
 
+def load_history_data():
+    """從 presale_history 讀取 2018-2023 歷史預售屋資料"""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        df = pd.read_sql(
+            "SELECT 年月, 季別, 鄉鎮市區, 交易標的, 建案名稱, 門牌, 建物型態, "
+            "總價元, 單價元平方公尺, 建物移轉總面積平方公尺, 屋齡, 交易年月日 "
+            "FROM presale_history ORDER BY 年月, 鄉鎮市區",
+            conn
+        )
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
+    if df.empty:
+        return df
+    df["總價萬"] = pd.to_numeric(df["總價元"], errors="coerce").div(10000).round(1)
+    df["單價萬坪"] = pd.to_numeric(df["單價元平方公尺"], errors="coerce").mul(3.3058).div(10000).round(1)
+    df["面積坪"] = pd.to_numeric(df["建物移轉總面積平方公尺"], errors="coerce").mul(0.3025).round(1)
+    return df
+
+
+def build_history_sheet(df_hist):
+    """2018-2025成交資料 分頁"""
+    rows = [["大台中預售屋歷史成交資料（2018-2023）"],
+            ["年月", "季別", "鄉鎮市區", "交易標的", "建案名稱", "門牌", "建物型態",
+             "總價（萬）", "單價（萬/坪）", "面積（坪）", "屋齡", "交易年月日"]]
+    if df_hist.empty:
+        rows.append(["（尚無歷史資料，請先執行 import_history.py）"])
+        return rows
+    cols = ["年月", "季別", "鄉鎮市區", "交易標的", "建案名稱", "門牌", "建物型態",
+            "總價萬", "單價萬坪", "面積坪", "屋齡", "交易年月日"]
+    available = [c for c in cols if c in df_hist.columns]
+    out = df_hist[available].fillna("").astype(str)
+    for _, r in out.iterrows():
+        rows.append(r.tolist())
+    return rows
+
+
 def build_sale_raw(df_sale):
-    """成屋總表：原始資料"""
-    rows = [["大台中成屋（不動產買賣）總表"],
-            ["年月", "鄉鎮市區", "交易標的", "建物型態", "主要用途",
+    """成屋總表：原始資料（只含屋齡 5 年以內）"""
+    rows = [["大台中成屋（不動產買賣）總表（屋齡 5 年以內）"],
+            ["年月", "鄉鎮市區", "交易標的", "建案名稱", "門牌", "建物型態", "主要用途",
              "屋齡", "坪數", "總價（萬）", "單價（萬/坪）", "移轉層次", "總樓層數", "交易年月日"]]
     if df_sale.empty:
         rows.append(["（尚無成屋資料）"])
         return rows
-    cols = ["年月", "鄉鎮市區", "交易標的", "建物型態", "主要用途",
-            "屋齡", "面積坪", "總價萬", "單價萬坪", "移轉層次", "總樓層數", "交易年月日"]
     df_sale = df_sale.copy()
+    # 篩選屋齡 5 年以內（屋齡為空的排除）
+    age = pd.to_numeric(df_sale["屋齡"], errors="coerce")
+    df_sale = df_sale[age.notna() & (age >= 0) & (age <= 5)].copy()
+    cols = ["年月", "鄉鎮市區", "交易標的", "建案名稱", "門牌", "建物型態", "主要用途",
+            "屋齡", "面積坪", "總價萬", "單價萬坪", "移轉層次", "總樓層數", "交易年月日"]
     if "建物移轉總面積平方公尺" in df_sale.columns:
         df_sale["面積坪"] = pd.to_numeric(
             df_sale["建物移轉總面積平方公尺"], errors="coerce").mul(0.3025).round(1)
+    if "建案名稱" not in df_sale.columns:
+        df_sale["建案名稱"] = ""
     available = [c for c in cols if c in df_sale.columns]
     out = df_sale[available].fillna("").astype(str)
     for _, r in out.iterrows():
@@ -520,6 +640,44 @@ def build_sale_month_summary(df_sale):
 
 # ── 主程式 ────────────────────────────────────────────────
 
+def load_threads_data():
+    """從 DB 載入 Threads 貼文（最近 90 天）"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql("""
+            SELECT 貼文時間, 來源值 AS 關鍵字, 帳號, 顯示名稱, 內容,
+                   按讚數, 回覆數, 貼文連結, 來源類型
+            FROM threads_posts
+            WHERE 貼文時間 >= date('now', '-90 days')
+            ORDER BY 按讚數 DESC, 貼文時間 DESC
+        """, conn)
+        conn.close()
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def build_threads_sheet(df_threads):
+    rows = [["Threads 輿情監控（近 90 天）"],
+            ["貼文時間", "來源關鍵字／帳號", "帳號", "顯示名稱",
+             "內容", "按讚數", "回覆數", "貼文連結"]]
+    if df_threads.empty:
+        rows.append(["（尚無資料，請先執行 threads_crawler.py）"])
+        return rows
+    for _, r in df_threads.iterrows():
+        rows.append([
+            str(r.get("貼文時間", ""))[:16],
+            str(r.get("關鍵字", "")),
+            str(r.get("帳號", "")),
+            str(r.get("顯示名稱", "")),
+            str(r.get("內容", ""))[:500],
+            int(r.get("按讚數", 0) or 0),
+            int(r.get("回覆數", 0) or 0),
+            str(r.get("貼文連結", "")),
+        ])
+    return rows
+
+
 def run():
     log("=== 開始寫入 Google Sheet（月報版）===")
     sheets = get_service()
@@ -538,15 +696,28 @@ def run():
     df_sale = load_sale_data()
     log(f"成屋資料：{len(df_sale):,} 筆")
 
+    # 用預售屋地址→建案名稱對照表補齊成屋建案名稱（含歷史資料，兩段式比對）
+    exact_lookup, street_lookup = build_address_name_lookup(df)
+    if not df_sale.empty and "門牌" in df_sale.columns:
+        df_sale["建案名稱"] = df_sale["門牌"].apply(
+            lambda x: _lookup_name(x, exact_lookup, street_lookup))
+        matched = (df_sale["建案名稱"] != "").sum()
+        log(f"成屋建案名稱比對：{matched}/{len(df_sale)} 筆成功")
+
+    df_hist = load_history_data()
+    log(f"歷史預售屋資料：{len(df_hist):,} 筆")
+
     log("準備資料中...")
     data_map = {
-        "總覽摘要":         build_summary(df, log_df),
-        "預售屋總表":       build_raw_data(df),
-        "月度統計摘要":     build_month_summary(df),
-        "各區建案統計摘要": build_case_summary(df),
-        "月度趨勢":         build_monthly_trend(df),
-        "成屋總表":         build_sale_raw(df_sale),
-        "成屋月度統計":     build_sale_month_summary(df_sale),
+        "總覽摘要":           build_summary(df, log_df),
+        "預售屋總表":         build_raw_data(df),
+        "月度統計摘要":       build_month_summary(df),
+        "各區建案統計摘要":   build_case_summary(df),
+        "月度趨勢":           build_monthly_trend(df),
+        "成屋總表":           build_sale_raw(df_sale),
+        "成屋月度統計":       build_sale_month_summary(df_sale),
+        "2018-2025成交資料":  build_history_sheet(df_hist),
+        "Threads輿情":        build_threads_sheet(load_threads_data()),
     }
     for dist in actual_districts:
         data_map[dist] = build_district(df, dist)

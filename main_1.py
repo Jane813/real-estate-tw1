@@ -8,6 +8,7 @@
   - 保留最近 3 個月，搭配 sheets_writer.py 產出月報
 """
 
+import re
 import requests
 import zipfile
 import os
@@ -17,6 +18,12 @@ import pandas as pd
 import calendar
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+
+def _clean_name(s):
+    """移除建案名稱中的亂碼字元（問號、Unicode 私用區 PUA U+E000-F8FF、替換字元）"""
+    s = str(s)
+    s = re.sub(r'[?-�]', '', s)
+    return s.strip()
 
 DB_PATH = "real_estate.db"
 DATA_FOLDER = "downloaded_data"
@@ -34,7 +41,7 @@ TAICHUNG_DISTRICTS = [
 PRE_COLS = {
     "鄉鎮市區": "鄉鎮市區",
     "交易標的": "交易標的",
-    "土地區段位置或建物門牌": "門牌",
+    "土地位置建物門牌": "門牌",
     "建物型態": "建物型態",
     "總價元": "總價元",
     "單價元平方公尺": "單價元平方公尺",
@@ -103,6 +110,20 @@ def init_database():
             總價元 REAL, 單價元平方公尺 REAL,
             建物移轉總面積平方公尺 REAL,
             交易年月日 TEXT, 移轉層次 TEXT, 總樓層數 TEXT,
+            匯入時間 TEXT,
+            UNIQUE(門牌, 交易年月日, 總價元)
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS presale_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            年月 TEXT,
+            季別 TEXT,
+            縣市 TEXT DEFAULT '臺中市',
+            鄉鎮市區 TEXT, 交易標的 TEXT,
+            門牌 TEXT, 建物型態 TEXT, 總價元 REAL,
+            單價元平方公尺 REAL, 建物移轉總面積平方公尺 REAL,
+            屋齡 REAL, 交易年月日 TEXT, 建案名稱 TEXT,
             匯入時間 TEXT,
             UNIQUE(門牌, 交易年月日, 總價元)
         )
@@ -367,7 +388,7 @@ def save_to_db(df, ym, season_code, source):
                 row.get("建物移轉總面積平方公尺", None),
                 row.get("屋齡", None),
                 str(row.get("交易年月日", "")),
-                str(row.get("建案名稱", "")).replace("?", "").strip(),
+                _clean_name(row.get("建案名稱", "")),
                 now_str
             ))
             if c.rowcount > 0:
