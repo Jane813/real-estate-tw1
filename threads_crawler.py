@@ -11,7 +11,7 @@ import sqlite3
 import os
 import json
 import re
-import time
+import base64
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 
@@ -115,10 +115,23 @@ def parse_relative_time(text):
 # ── Playwright ───────────────────────────────────────────────
 
 async def load_cookies(context):
+    # 優先從環境變數（base64 編碼的 THREADS_COOKIES secret）載入
+    encoded = os.environ.get("THREADS_COOKIES", "")
+    if encoded:
+        try:
+            cookies = json.loads(base64.b64decode(encoded).decode())
+            await context.add_cookies(cookies)
+            print("  使用 THREADS_COOKIES secret 登入")
+            return True
+        except Exception as e:
+            print(f"  THREADS_COOKIES 解碼失敗：{e}")
+
+    # fallback：本地 cookie 檔案
     if os.path.exists(COOKIES_FILE):
         with open(COOKIES_FILE) as f:
             cookies = json.load(f)
         await context.add_cookies(cookies)
+        print("  使用本地 cookie 檔案登入")
         return True
     return False
 

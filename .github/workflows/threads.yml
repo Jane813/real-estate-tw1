@@ -42,8 +42,7 @@ jobs:
 
       - name: 執行 Threads 爬蟲
         env:
-          THREADS_USERNAME: ${{ secrets.THREADS_USERNAME }}
-          THREADS_PASSWORD: ${{ secrets.THREADS_PASSWORD }}
+          THREADS_COOKIES: ${{ secrets.THREADS_COOKIES }}
         run: python threads_crawler.py
         continue-on-error: true
 
