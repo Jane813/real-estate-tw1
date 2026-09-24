@@ -112,6 +112,51 @@ def save_posts(posts):
     return inserted
 
 
+# ── API 指標攔截 ─────────────────────────────────────────────
+
+def _walk_metrics(obj, result):
+    """遞迴走訪 Threads API JSON，找含 code 的貼文互動數"""
+    if isinstance(obj, dict):
+        code = obj.get("code") or obj.get("shortcode")
+        if code and isinstance(code, str) and len(code) >= 4:
+            entry = result.setdefault(code, {})
+            lc = obj.get("like_count")
+            if lc is not None:
+                entry["按讚數"] = int(lc)
+            vc = (obj.get("view_info") or {}).get("view_count")
+            if vc is None:
+                vc = obj.get("view_count") or obj.get("play_count")
+            if vc:
+                entry["觀看數"] = int(vc)
+            sc = obj.get("share_count") or obj.get("reshare_count")
+            if sc:
+                entry["轉發數"] = int(sc)
+        for v in obj.values():
+            _walk_metrics(v, result)
+    elif isinstance(obj, list):
+        for item in obj:
+            _walk_metrics(item, result)
+
+
+def setup_api_capture(page, metrics_store):
+    """監聽 API 回應，自動累積貼文指標到 metrics_store"""
+    async def _handler(response):
+        try:
+            if response.status != 200:
+                return
+            url = response.url
+            if "graphql" not in url and "/api/v1/" not in url:
+                return
+            ct = response.headers.get("content-type", "")
+            if "json" not in ct:
+                return
+            body = await response.json()
+            _walk_metrics(body, metrics_store)
+        except Exception:
+            pass
+    page.on("response", _handler)
+
+
 # ── 時間解析 ─────────────────────────────────────────────────
 
 def parse_relative_time(text):
@@ -346,7 +391,7 @@ async def scroll_and_collect(page, max_posts):
     return all_posts[:max_posts]
 
 
-async def search_keyword(page, keyword):
+async def search_keyword(page, keyword, metrics_store):
     """搜尋關鍵字，取熱門貼文"""
     print(f"  搜尋：{keyword}")
     url = f"https://www.threads.net/search?q={keyword}&serp_type=default"
@@ -357,20 +402,22 @@ async def search_keyword(page, keyword):
     posts = []
     for p in raw:
         time_str = p.get("timeText", "")
-        if "T" in time_str:  # ISO format
+        if "T" in time_str:
             post_time = time_str[:19].replace("T", " ")
         else:
             post_time = parse_relative_time(time_str)
 
+        post_id = p.get("postId", "")
+        api = metrics_store.get(post_id, {})
         posts.append({
-            "post_id":   p.get("postId", ""),
+            "post_id":   post_id,
             "帳號":      p.get("account", ""),
             "顯示名稱":  p.get("displayName", ""),
             "內容":      p.get("content", ""),
-            "按讚數":    p.get("likes", 0),
+            "按讚數":    api.get("按讚數", p.get("likes", 0)),
             "回覆數":    p.get("replies", 0),
-            "轉發數":    p.get("reposts", 0),
-            "觀看數":    p.get("views", 0),
+            "轉發數":    api.get("轉發數", p.get("reposts", 0)),
+            "觀看數":    api.get("觀看數", p.get("views", 0)),
             "來源類型":  "keyword",
             "來源值":    keyword,
             "貼文時間":  post_time,
@@ -379,7 +426,7 @@ async def search_keyword(page, keyword):
     return posts
 
 
-async def get_account_posts(page, account):
+async def get_account_posts(page, account, metrics_store):
     """取得指定帳號的最新貼文"""
     print(f"  帳號：@{account}")
     await page.goto(f"https://www.threads.net/@{account}", wait_until="domcontentloaded", timeout=30000)
@@ -394,15 +441,17 @@ async def get_account_posts(page, account):
         else:
             post_time = parse_relative_time(time_str)
 
+        post_id = p.get("postId", "")
+        api = metrics_store.get(post_id, {})
         posts.append({
-            "post_id":   p.get("postId", ""),
+            "post_id":   post_id,
             "帳號":      account,
             "顯示名稱":  p.get("displayName", ""),
             "內容":      p.get("content", ""),
-            "按讚數":    p.get("likes", 0),
+            "按讚數":    api.get("按讚數", p.get("likes", 0)),
             "回覆數":    p.get("replies", 0),
-            "轉發數":    p.get("reposts", 0),
-            "觀看數":    p.get("views", 0),
+            "轉發數":    api.get("轉發數", p.get("reposts", 0)),
+            "觀看數":    api.get("觀看數", p.get("views", 0)),
             "來源類型":  "account",
             "來源值":    account,
             "貼文時間":  post_time,
@@ -428,6 +477,10 @@ async def main():
         )
         page = await context.new_page()
 
+        # API 指標攔截（觀看數、轉發數從 GraphQL 回應取得）
+        metrics_store = {}
+        setup_api_capture(page, metrics_store)
+
         # 登入（優先用 cookie；有 cookie 就直接繼續，不 fallback 密碼登入）
         cookie_loaded = await load_cookies(context)
         if cookie_loaded:
@@ -446,7 +499,7 @@ async def main():
             print(f"\n── 關鍵字搜尋（{len(KEYWORDS)} 組）──")
             for kw in KEYWORDS:
                 try:
-                    posts = await search_keyword(page, kw)
+                    posts = await search_keyword(page, kw, metrics_store)
                     n = save_posts(posts)
                     print(f"    {kw}：抓到 {len(posts)} 則，新增 {n} 筆")
                     total_new += n
@@ -459,7 +512,7 @@ async def main():
             print(f"\n── 帳號監控（{len(WATCH_ACCOUNTS)} 個）──")
             for acc in WATCH_ACCOUNTS:
                 try:
-                    posts = await get_account_posts(page, acc)
+                    posts = await get_account_posts(page, acc, metrics_store)
                     n = save_posts(posts)
                     print(f"    @{acc}：抓到 {len(posts)} 則，新增 {n} 筆")
                     total_new += n
