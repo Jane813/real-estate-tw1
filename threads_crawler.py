@@ -146,32 +146,49 @@ async def login(page, context):
     if not username or not password:
         raise ValueError("請設定環境變數 THREADS_USERNAME 和 THREADS_PASSWORD")
 
+    # Threads 登入會轉到 Instagram 登入頁
     await page.goto("https://www.threads.net/login", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(3)
+    await asyncio.sleep(4)
 
-    # 填入帳號
-    user_input = page.locator('input[autocomplete="username"], input[type="text"]').first
-    await user_input.fill(username)
-    await asyncio.sleep(1)
+    # 若有「以 Instagram 繼續」按鈕先點它
+    try:
+        ig_btn = page.locator('a[href*="instagram"], button:has-text("Instagram"), div[role="button"]:has-text("Instagram")').first
+        if await ig_btn.is_visible(timeout=3000):
+            await ig_btn.click()
+            await asyncio.sleep(3)
+    except Exception:
+        pass
 
-    # 填入密碼
-    pass_input = page.locator('input[type="password"]').first
-    await pass_input.fill(password)
-    await asyncio.sleep(1)
+    # Instagram 登入表單 selector
+    try:
+        user_input = page.locator('input[name="username"]').first
+        await user_input.wait_for(state="visible", timeout=10000)
+        await user_input.fill(username)
+        await asyncio.sleep(1)
 
-    # 送出
-    await pass_input.press("Enter")
-    await asyncio.sleep(5)
+        pass_input = page.locator('input[name="password"]').first
+        await pass_input.fill(password)
+        await asyncio.sleep(1)
 
-    # 等待登入完成
+        await pass_input.press("Enter")
+    except Exception:
+        # fallback：通用 selector
+        await page.fill('input[type="text"]', username)
+        await asyncio.sleep(0.5)
+        await page.fill('input[type="password"]', password)
+        await asyncio.sleep(0.5)
+        await page.keyboard.press("Enter")
+
+    await asyncio.sleep(6)
     await page.wait_for_load_state("domcontentloaded")
     await asyncio.sleep(3)
 
-    if "login" in page.url:
-        raise RuntimeError("登入失敗，請確認帳號密碼")
+    current_url = page.url
+    if "login" in current_url and "accounts" in current_url:
+        raise RuntimeError("登入失敗，請確認帳號密碼是否正確")
 
     await save_cookies(context)
-    print("  登入成功")
+    print(f"  登入成功（{current_url[:50]}）")
 
 
 async def extract_posts_from_page(page):

@@ -45,6 +45,7 @@ jobs:
           THREADS_USERNAME: ${{ secrets.THREADS_USERNAME }}
           THREADS_PASSWORD: ${{ secrets.THREADS_PASSWORD }}
         run: python threads_crawler.py
+        continue-on-error: true
 
       - name: 寫入 Google Sheet
         env:
