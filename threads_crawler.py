@@ -21,11 +21,22 @@ COOKIES_FILE = "threads_cookies.json"
 # ── 設定區（可自訂） ─────────────────────────────────────────
 
 KEYWORDS = [
+    # 全市關鍵字
     "台中房地產",
     "台中預售屋",
     "台中建案",
     "台中買房",
     "台中新成屋",
+    # 各區關鍵字
+    "台中西屯區",
+    "台中南屯區",
+    "台中北屯區",
+    "台中豐原區",
+    "台中大里區",
+    "台中太平區",
+    "台中烏日區",
+    "台中北區房",
+    "台中西區房",
 ]
 
 WATCH_ACCOUNTS = [
@@ -53,6 +64,8 @@ def init_db():
             內容        TEXT,
             按讚數      INTEGER DEFAULT 0,
             回覆數      INTEGER DEFAULT 0,
+            轉發數      INTEGER DEFAULT 0,
+            觀看數      INTEGER DEFAULT 0,
             來源類型    TEXT,
             來源值      TEXT,
             貼文時間    TEXT,
@@ -60,6 +73,12 @@ def init_db():
             爬取時間    TEXT
         )
     """)
+    # 舊資料庫補欄位（若不存在）
+    for col in ("轉發數", "觀看數"):
+        try:
+            conn.execute(f"ALTER TABLE threads_posts ADD COLUMN {col} INTEGER DEFAULT 0")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -74,12 +93,13 @@ def save_posts(posts):
         try:
             conn.execute("""
                 INSERT OR IGNORE INTO threads_posts
-                (post_id, 帳號, 顯示名稱, 內容, 按讚數, 回覆數,
+                (post_id, 帳號, 顯示名稱, 內容, 按讚數, 回覆數, 轉發數, 觀看數,
                  來源類型, 來源值, 貼文時間, 貼文連結, 爬取時間)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 p.get("post_id"), p.get("帳號"), p.get("顯示名稱"),
                 p.get("內容"), p.get("按讚數", 0), p.get("回覆數", 0),
+                p.get("轉發數", 0), p.get("觀看數", 0),
                 p.get("來源類型"), p.get("來源值"),
                 p.get("貼文時間"), p.get("貼文連結"), now
             ))
@@ -262,19 +282,29 @@ async def extract_posts_from_page(page):
                     timeText = timeEl.getAttribute('datetime') || timeEl.textContent.trim();
                 }
 
-                // 按讚數（找含數字的按鈕/span）
-                let likes = 0, replies = 0;
+                // 按讚數、回覆數、轉發數（依序取前三個非零數字）
+                let likes = 0, replies = 0, reposts = 0;
                 const btns = el.querySelectorAll('span[class*="count"], button span, svg + span');
                 btns.forEach(b => {
                     const n = parseInt(b.textContent.replace(/[^0-9]/g, ''), 10);
                     if (!isNaN(n) && n > 0) {
                         if (likes === 0) likes = n;
                         else if (replies === 0) replies = n;
+                        else if (reposts === 0) reposts = n;
                     }
                 });
 
+                // 觀看數（抓 "X人看過" 或 "X 人看過" 或 "X views"）
+                let views = 0;
+                const fullText = el.textContent || '';
+                const viewMatch = fullText.match(/([0-9,，]+)\s*人看過/) ||
+                                  fullText.match(/([0-9,，]+)\s*views?/i);
+                if (viewMatch) {
+                    views = parseInt(viewMatch[1].replace(/[,，]/g, ''), 10) || 0;
+                }
+
                 if (content) {
-                    results.push({ postId, account, displayName, content, likes, replies, timeText, link });
+                    results.push({ postId, account, displayName, content, likes, replies, reposts, views, timeText, link });
                 }
             } catch (e) {}
         });
@@ -339,6 +369,8 @@ async def search_keyword(page, keyword):
             "內容":      p.get("content", ""),
             "按讚數":    p.get("likes", 0),
             "回覆數":    p.get("replies", 0),
+            "轉發數":    p.get("reposts", 0),
+            "觀看數":    p.get("views", 0),
             "來源類型":  "keyword",
             "來源值":    keyword,
             "貼文時間":  post_time,
@@ -369,6 +401,8 @@ async def get_account_posts(page, account):
             "內容":      p.get("content", ""),
             "按讚數":    p.get("likes", 0),
             "回覆數":    p.get("replies", 0),
+            "轉發數":    p.get("reposts", 0),
+            "觀看數":    p.get("views", 0),
             "來源類型":  "account",
             "來源值":    account,
             "貼文時間":  post_time,

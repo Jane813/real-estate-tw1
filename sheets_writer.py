@@ -646,10 +646,10 @@ def load_threads_data():
         conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql("""
             SELECT 貼文時間, 來源值 AS 關鍵字, 帳號, 顯示名稱, 內容,
-                   按讚數, 回覆數, 貼文連結, 來源類型
+                   觀看數, 按讚數, 回覆數, 轉發數, 貼文連結, 來源類型
             FROM threads_posts
             WHERE 貼文時間 >= date('now', '-90 days')
-            ORDER BY 按讚數 DESC, 貼文時間 DESC
+            ORDER BY 觀看數 DESC, 按讚數 DESC, 貼文時間 DESC
         """, conn)
         conn.close()
         return df
@@ -660,7 +660,7 @@ def load_threads_data():
 def build_threads_sheet(df_threads):
     rows = [["Threads 輿情監控（近 90 天）"],
             ["貼文時間", "來源關鍵字／帳號", "帳號", "顯示名稱",
-             "內容", "按讚數", "回覆數", "貼文連結"]]
+             "內容", "觀看數", "按讚數", "回覆數", "轉發數", "貼文連結"]]
     if df_threads.empty:
         rows.append(["（尚無資料，請先執行 threads_crawler.py）"])
         return rows
@@ -671,8 +671,10 @@ def build_threads_sheet(df_threads):
             str(r.get("帳號", "")),
             str(r.get("顯示名稱", "")),
             str(r.get("內容", ""))[:500],
+            int(r.get("觀看數", 0) or 0),
             int(r.get("按讚數", 0) or 0),
             int(r.get("回覆數", 0) or 0),
+            int(r.get("轉發數", 0) or 0),
             str(r.get("貼文連結", "")),
         ])
     return rows
