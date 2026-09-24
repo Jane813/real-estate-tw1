@@ -140,55 +140,52 @@ async def is_logged_in(page):
 
 
 async def login(page, context):
-    print("  登入 Threads...")
+    print("  登入 Threads（透過 Instagram）...")
     username = os.environ.get("THREADS_USERNAME", "")
     password = os.environ.get("THREADS_PASSWORD", "")
     if not username or not password:
         raise ValueError("請設定環境變數 THREADS_USERNAME 和 THREADS_PASSWORD")
 
-    # Threads 登入會轉到 Instagram 登入頁
-    await page.goto("https://www.threads.net/login", wait_until="domcontentloaded", timeout=30000)
+    # 直接走 Instagram 登入，登入後自動套用 Threads session
+    await page.goto(
+        "https://www.instagram.com/accounts/login/?next=https%3A%2F%2Fwww.threads.net%2F",
+        wait_until="domcontentloaded", timeout=30000
+    )
     await asyncio.sleep(4)
 
-    # 若有「以 Instagram 繼續」按鈕先點它
+    # 等待 Instagram 登入表單出現
     try:
-        ig_btn = page.locator('a[href*="instagram"], button:has-text("Instagram"), div[role="button"]:has-text("Instagram")').first
-        if await ig_btn.is_visible(timeout=3000):
-            await ig_btn.click()
-            await asyncio.sleep(3)
+        await page.wait_for_selector('input[name="username"]', timeout=15000)
     except Exception:
-        pass
+        # 可能已登入或頁面結構不同
+        current = page.url
+        print(f"  頁面：{current[:60]}")
+        if "instagram.com" not in current and "login" not in current:
+            print("  可能已登入")
+            await save_cookies(context)
+            return
 
-    # Instagram 登入表單 selector
-    try:
-        user_input = page.locator('input[name="username"]').first
-        await user_input.wait_for(state="visible", timeout=10000)
-        await user_input.fill(username)
-        await asyncio.sleep(1)
+    await page.fill('input[name="username"]', username)
+    await asyncio.sleep(1)
+    await page.fill('input[name="password"]', password)
+    await asyncio.sleep(1)
+    await page.click('button[type="submit"]')
 
-        pass_input = page.locator('input[name="password"]').first
-        await pass_input.fill(password)
-        await asyncio.sleep(1)
-
-        await pass_input.press("Enter")
-    except Exception:
-        # fallback：通用 selector
-        await page.fill('input[type="text"]', username)
-        await asyncio.sleep(0.5)
-        await page.fill('input[type="password"]', password)
-        await asyncio.sleep(0.5)
-        await page.keyboard.press("Enter")
-
-    await asyncio.sleep(6)
+    await asyncio.sleep(8)
     await page.wait_for_load_state("domcontentloaded")
-    await asyncio.sleep(3)
 
     current_url = page.url
-    if "login" in current_url and "accounts" in current_url:
-        raise RuntimeError("登入失敗，請確認帳號密碼是否正確")
+    print(f"  登入後頁面：{current_url[:60]}")
+
+    if "login" in current_url:
+        raise RuntimeError("登入失敗，請確認帳號密碼")
+
+    # 導回 Threads
+    await page.goto("https://www.threads.net/", wait_until="domcontentloaded", timeout=20000)
+    await asyncio.sleep(3)
 
     await save_cookies(context)
-    print(f"  登入成功（{current_url[:50]}）")
+    print("  登入成功")
 
 
 async def extract_posts_from_page(page):
