@@ -407,16 +407,28 @@ async def scroll_and_collect(page, max_posts, since_date=None, max_scrolls=10):
 
 
 async def search_keyword(page, keyword, metrics_store, since_date=None, max_posts=None, max_scrolls=10):
-    """搜尋關鍵字，取熱門貼文"""
+    """搜尋關鍵字，同時爬文字搜尋和主題標籤兩個頁面"""
     print(f"  搜尋：{keyword}")
-    url = f"https://www.threads.net/search?q={keyword}&serp_type=default"
-    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(3)
-
     limit = max_posts or MAX_POSTS_PER_KEYWORD
-    raw = await scroll_and_collect(page, limit, since_date=since_date, max_scrolls=max_scrolls)
+    seen_ids = set()
+    raw_all = []
+
+    for serp_type in ("default", "tags"):
+        url = f"https://www.threads.net/search?q={keyword}&serp_type={serp_type}"
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(3)
+            batch = await scroll_and_collect(page, limit, since_date=since_date, max_scrolls=max_scrolls)
+            for p in batch:
+                pid = p.get("postId", "")
+                if pid and pid not in seen_ids:
+                    seen_ids.add(pid)
+                    raw_all.append(p)
+        except Exception as e:
+            print(f"    {keyword}（{serp_type}）失敗：{e}")
+
     posts = []
-    for p in raw:
+    for p in raw_all:
         time_str = p.get("timeText", "")
         if "T" in time_str:
             post_time = time_str[:19].replace("T", " ")
