@@ -210,10 +210,10 @@ async def save_cookies(context):
 
 async def is_logged_in(page):
     try:
-        await page.goto("https://www.threads.net/", wait_until="domcontentloaded", timeout=20000)
+        await page.goto("https://www.threads.com/", wait_until="domcontentloaded", timeout=20000)
         await asyncio.sleep(2)
         url = page.url
-        return "login" not in url and "threads.net" in url
+        return "login" not in url and "threads" in url
     except Exception:
         return False
 
@@ -227,7 +227,7 @@ async def login(page, context):
 
     # 直接走 Instagram 登入，登入後自動套用 Threads session
     await page.goto(
-        "https://www.instagram.com/accounts/login/?next=https%3A%2F%2Fwww.threads.net%2F",
+        "https://www.instagram.com/accounts/login/?next=https%3A%2F%2Fwww.threads.com%2F",
         wait_until="domcontentloaded", timeout=30000
     )
     await asyncio.sleep(4)
@@ -260,7 +260,7 @@ async def login(page, context):
         raise RuntimeError("登入失敗，請確認帳號密碼")
 
     # 導回 Threads
-    await page.goto("https://www.threads.net/", wait_until="domcontentloaded", timeout=20000)
+    await page.goto("https://www.threads.com/", wait_until="domcontentloaded", timeout=20000)
     await asyncio.sleep(3)
 
     await save_cookies(context)
@@ -293,7 +293,7 @@ async def extract_posts_from_page(page):
                 // 貼文連結（從 a href 找含 /post/ 的）
                 const links = el.querySelectorAll('a[href*="/post/"]');
                 if (links.length === 0) return;
-                const link = 'https://www.threads.net' + links[0].getAttribute('href');
+                const link = 'https://www.threads.com' + links[0].getAttribute('href');
                 const postId = link.split('/post/')[1]?.split('?')[0];
                 if (!postId || seen.has(postId)) return;
                 seen.add(postId);
@@ -413,8 +413,16 @@ async def search_keyword(page, keyword, metrics_store, since_date=None, max_post
     seen_ids = set()
     raw_all = []
 
-    for serp_type in ("default", "tags"):
-        url = f"https://www.threads.net/search?q={keyword}&serp_type={serp_type}"
+    import urllib.parse
+    search_urls = [
+        # 文字關鍵字搜尋（熱門）
+        f"https://www.threads.com/search?q={urllib.parse.quote(keyword)}&serp_type=default&hl=zh-tw",
+        # 文字關鍵字搜尋（最新）
+        f"https://www.threads.com/search?q={urllib.parse.quote(keyword)}&serp_type=default&filter=recent&hl=zh-tw",
+        # 主題標籤搜尋（#關鍵字）
+        f"https://www.threads.com/search?q={urllib.parse.quote('#' + keyword)}&serp_type=new&hl=zh-tw",
+    ]
+    for url in search_urls:
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(3)
@@ -425,7 +433,7 @@ async def search_keyword(page, keyword, metrics_store, since_date=None, max_post
                     seen_ids.add(pid)
                     raw_all.append(p)
         except Exception as e:
-            print(f"    {keyword}（{serp_type}）失敗：{e}")
+            print(f"    {keyword} 失敗：{e}")
 
     posts = []
     for p in raw_all:
@@ -462,7 +470,7 @@ async def search_keyword(page, keyword, metrics_store, since_date=None, max_post
 async def get_account_posts(page, account, metrics_store, since_date=None, max_posts=None, max_scrolls=10):
     """取得指定帳號的最新貼文"""
     print(f"  帳號：@{account}")
-    await page.goto(f"https://www.threads.net/@{account}", wait_until="domcontentloaded", timeout=30000)
+    await page.goto(f"https://www.threads.com/@{account}", wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(3)
 
     limit = max_posts or MAX_POSTS_PER_ACCOUNT
