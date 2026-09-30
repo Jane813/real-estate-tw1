@@ -3,7 +3,12 @@ name: Threads 輿情爬蟲
 on:
   schedule:
     - cron: '0 2 * * *'    # 每天 UTC 02:00（台灣時間 10:00）
-  workflow_dispatch:        # 手動觸發
+  workflow_dispatch:
+    inputs:
+      since:
+        description: '從指定日期爬取所有貼文（YYYY-MM-DD），空白表示一般模式'
+        required: false
+        default: ''
 
 jobs:
   threads-crawl:
@@ -43,7 +48,13 @@ jobs:
       - name: 執行 Threads 爬蟲
         env:
           THREADS_COOKIES: ${{ secrets.THREADS_COOKIES }}
-        run: python threads_crawler.py
+        run: |
+          SINCE="${{ github.event.inputs.since }}"
+          if [ -n "$SINCE" ]; then
+            python threads_crawler.py --since "$SINCE"
+          else
+            python threads_crawler.py
+          fi
         continue-on-error: true
 
       - name: 寫入 Google Sheet

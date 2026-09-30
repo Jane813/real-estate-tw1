@@ -6,6 +6,7 @@ Threads 輿情爬蟲
 - 環境變數：THREADS_USERNAME / THREADS_PASSWORD
 """
 
+import argparse
 import asyncio
 import sqlite3
 import os
@@ -359,21 +360,31 @@ async def extract_posts_from_page(page):
     return posts
 
 
-async def scroll_and_collect(page, max_posts):
-    """滾動頁面並收集貼文，直到達到上限"""
+async def scroll_and_collect(page, max_posts, since_date=None, max_scrolls=10):
+    """滾動頁面並收集貼文，直到達到上限或所有貼文都早於 since_date"""
     all_posts = []
     seen_ids = set()
     no_new_count = 0
 
-    for _ in range(10):  # 最多滾動 10 次
+    for _ in range(max_scrolls):
         posts = await extract_posts_from_page(page)
         new = 0
+        all_older = True
         for p in posts:
             pid = p.get("postId", "")
             if pid and pid not in seen_ids:
                 seen_ids.add(pid)
                 all_posts.append(p)
                 new += 1
+            # 檢查是否有比 since_date 新的貼文
+            if since_date:
+                t = p.get("timeText", "")
+                if t and "T" in t:
+                    post_date = t[:10]
+                    if post_date >= since_date:
+                        all_older = False
+                else:
+                    all_older = False  # 相對時間無法判斷，繼續滾動
 
         if new == 0:
             no_new_count += 1
@@ -385,20 +396,25 @@ async def scroll_and_collect(page, max_posts):
         if len(all_posts) >= max_posts:
             break
 
+        # 若這批所有貼文都早於 since_date，停止滾動
+        if since_date and all_older and len(posts) > 0:
+            break
+
         await page.evaluate("window.scrollBy(0, window.innerHeight * 2)")
         await asyncio.sleep(2)
 
     return all_posts[:max_posts]
 
 
-async def search_keyword(page, keyword, metrics_store):
+async def search_keyword(page, keyword, metrics_store, since_date=None, max_posts=None, max_scrolls=10):
     """搜尋關鍵字，取熱門貼文"""
     print(f"  搜尋：{keyword}")
     url = f"https://www.threads.net/search?q={keyword}&serp_type=default"
     await page.goto(url, wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(3)
 
-    raw = await scroll_and_collect(page, MAX_POSTS_PER_KEYWORD)
+    limit = max_posts or MAX_POSTS_PER_KEYWORD
+    raw = await scroll_and_collect(page, limit, since_date=since_date, max_scrolls=max_scrolls)
     posts = []
     for p in raw:
         time_str = p.get("timeText", "")
@@ -406,6 +422,11 @@ async def search_keyword(page, keyword, metrics_store):
             post_time = time_str[:19].replace("T", " ")
         else:
             post_time = parse_relative_time(time_str)
+
+        # --since 過濾：只保留 since_date 當天或之後的貼文
+        if since_date and "T" in p.get("timeText", ""):
+            if p["timeText"][:10] < since_date:
+                continue
 
         post_id = p.get("postId", "")
         api = metrics_store.get(post_id, {})
@@ -426,13 +447,14 @@ async def search_keyword(page, keyword, metrics_store):
     return posts
 
 
-async def get_account_posts(page, account, metrics_store):
+async def get_account_posts(page, account, metrics_store, since_date=None, max_posts=None, max_scrolls=10):
     """取得指定帳號的最新貼文"""
     print(f"  帳號：@{account}")
     await page.goto(f"https://www.threads.net/@{account}", wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(3)
 
-    raw = await scroll_and_collect(page, MAX_POSTS_PER_ACCOUNT)
+    limit = max_posts or MAX_POSTS_PER_ACCOUNT
+    raw = await scroll_and_collect(page, limit, since_date=since_date, max_scrolls=max_scrolls)
     posts = []
     for p in raw:
         time_str = p.get("timeText", "")
@@ -440,6 +462,11 @@ async def get_account_posts(page, account, metrics_store):
             post_time = time_str[:19].replace("T", " ")
         else:
             post_time = parse_relative_time(time_str)
+
+        # --since 過濾
+        if since_date and "T" in p.get("timeText", ""):
+            if p["timeText"][:10] < since_date:
+                continue
 
         post_id = p.get("postId", "")
         api = metrics_store.get(post_id, {})
@@ -462,9 +489,10 @@ async def get_account_posts(page, account, metrics_store):
 
 # ── 主程式 ───────────────────────────────────────────────────
 
-async def main():
+async def main(since_date=None):
     init_db()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] === Threads 輿情爬蟲開始 ===")
+    label = f"（--since {since_date}）" if since_date else ""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] === Threads 輿情爬蟲開始{label} ===")
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
@@ -494,12 +522,20 @@ async def main():
 
         total_new = 0
 
+        # --since 模式：加大抓取上限與滾動次數
+        kw_max = 200 if since_date else MAX_POSTS_PER_KEYWORD
+        acc_max = 100 if since_date else MAX_POSTS_PER_ACCOUNT
+        scrolls = 30 if since_date else 10
+
         # 關鍵字搜尋
         if KEYWORDS:
             print(f"\n── 關鍵字搜尋（{len(KEYWORDS)} 組）──")
             for kw in KEYWORDS:
                 try:
-                    posts = await search_keyword(page, kw, metrics_store)
+                    posts = await search_keyword(page, kw, metrics_store,
+                                                 since_date=since_date,
+                                                 max_posts=kw_max,
+                                                 max_scrolls=scrolls)
                     n = save_posts(posts)
                     print(f"    {kw}：抓到 {len(posts)} 則，新增 {n} 筆")
                     total_new += n
@@ -512,7 +548,10 @@ async def main():
             print(f"\n── 帳號監控（{len(WATCH_ACCOUNTS)} 個）──")
             for acc in WATCH_ACCOUNTS:
                 try:
-                    posts = await get_account_posts(page, acc, metrics_store)
+                    posts = await get_account_posts(page, acc, metrics_store,
+                                                    since_date=since_date,
+                                                    max_posts=acc_max,
+                                                    max_scrolls=scrolls)
                     n = save_posts(posts)
                     print(f"    @{acc}：抓到 {len(posts)} 則，新增 {n} 筆")
                     total_new += n
@@ -531,4 +570,8 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--since", metavar="YYYY-MM-DD",
+                        help="只爬取此日期（含）之後的貼文，並加大抓取量")
+    args = parser.parse_args()
+    asyncio.run(main(since_date=args.since))
