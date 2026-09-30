@@ -37,6 +37,30 @@ TAICHUNG_DISTRICTS = [
 FIXED_SHEETS = ["總覽摘要", "預售屋總表", "月度統計摘要", "各區建案統計摘要", "月度趨勢",
                 "成屋總表", "成屋月度統計", "2018-2025成交資料", "Threads輿情"]
 
+NAME_CORRECTIONS_FILE = "name_corrections.json"
+
+
+def load_name_corrections():
+    """讀取建案名稱對照表，回傳 {(wrong, district): correct} dict"""
+    try:
+        with open(NAME_CORRECTIONS_FILE, encoding="utf-8") as f:
+            entries = json.load(f)
+        mapping = {}
+        for e in entries:
+            key = (e["wrong"], e.get("district", ""))
+            mapping[key] = e["correct"]
+        return mapping
+    except Exception:
+        return {}
+
+
+def apply_name_correction(name, district, mapping):
+    """套用建案名稱修正（優先比對區域，再比對無區域限制的）"""
+    return mapping.get((name, district)) or mapping.get((name, ""), name)
+
+
+NAME_MAP = load_name_corrections()
+
 
 def log(msg):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -184,7 +208,15 @@ def load_data():
         # 建案名稱含 ? 代表編碼問題，移除問號保留其餘文字
         if "建案名稱" in df.columns:
             df["建案名稱"] = df["建案名稱"].apply(
-                lambda x: re.sub(r'[?-�]', '', str(x)).strip())
+                lambda x: re.sub(r"[?-�]", "", str(x)).strip())
+            # 套用人工對照表修正（例：聯馨→聯悅馨）
+            if "鄉鎮市區" in df.columns:
+                df["建案名稱"] = df.apply(
+                    lambda r: apply_name_correction(
+                        r["建案名稱"], r.get("鄉鎮市區", ""), NAME_MAP), axis=1)
+            else:
+                df["建案名稱"] = df["建案名稱"].apply(
+                    lambda n: apply_name_correction(n, "", NAME_MAP))
 
     return df, log_df
 
