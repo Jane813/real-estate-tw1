@@ -1,8 +1,362 @@
 [
   {
-    "wrong":   "聯馨",
+    "wrong": "聯馨",
     "correct": "聯悅馨",
     "district": "梧棲區",
     "note": "政府申報填縮寫，591顯示完整名稱"
+  },
+  {
+    "wrong": "澐光",
+    "correct": "富華澐光",
+    "district": "北屯區",
+    "note": "591比對 DB:248筆 591:134筆"
+  },
+  {
+    "wrong": "敘真",
+    "correct": "由鉅建設．敘真",
+    "district": "太平區",
+    "note": "591比對 DB:48筆 591:172筆"
+  },
+  {
+    "wrong": "鉅陞大",
+    "correct": "鉅陞大藴",
+    "district": "南屯區",
+    "note": "591比對 DB:40筆 591:20筆"
+  },
+  {
+    "wrong": "茂居甲寶鑽",
+    "correct": "甲寶鑽",
+    "district": "大甲區",
+    "note": "591比對 DB:24筆 591:54筆"
+  },
+  {
+    "wrong": "織光森鄰",
+    "correct": "新業織光森鄰",
+    "district": "清水區",
+    "note": "591比對 DB:22筆 591:11筆"
+  },
+  {
+    "wrong": "崇德序3",
+    "correct": "雅敦崇德序3",
+    "district": "北屯區",
+    "note": "591比對 DB:14筆 591:17筆"
+  },
+  {
+    "wrong": "芮上",
+    "correct": "茂居芮上",
+    "district": "南屯區",
+    "note": "591比對 DB:12筆 591:8筆"
+  },
+  {
+    "wrong": "凱悅MOMA",
+    "correct": "凱悅MOMA(透天)",
+    "district": "沙鹿區",
+    "note": "591比對 DB:10筆 591:3筆"
+  },
+  {
+    "wrong": "國雄無",
+    "correct": "國雄無双",
+    "district": "西屯區",
+    "note": "591比對 DB:10筆 591:372筆"
+  },
+  {
+    "wrong": "富精科2",
+    "correct": "禾盛富精科2",
+    "district": "南屯區",
+    "note": "591比對 DB:10筆 591:5筆"
+  },
+  {
+    "wrong": "逸築",
+    "correct": "逸竑逸築",
+    "district": "神岡區",
+    "note": "591比對 DB:10筆 591:9筆"
+  },
+  {
+    "wrong": "日興-中港御園Ⅱ",
+    "correct": "中港御園",
+    "district": "西屯區",
+    "note": "591比對 DB:8筆 591:42筆"
+  },
+  {
+    "wrong": "浩瀚創立方",
+    "correct": "浩瀚創立方4x4",
+    "district": "北屯區",
+    "note": "591比對 DB:8筆 591:587筆"
+  },
+  {
+    "wrong": "清水觀止一期",
+    "correct": "清水觀止",
+    "district": "清水區",
+    "note": "591比對 DB:8筆 591:18筆"
+  },
+  {
+    "wrong": "玉見築",
+    "correct": "沅宬玉見築",
+    "district": "南屯區",
+    "note": "591比對 DB:8筆 591:6筆"
+  },
+  {
+    "wrong": "語文心",
+    "correct": "坤悅語文心",
+    "district": "南區",
+    "note": "591比對 DB:8筆 591:146筆"
+  },
+  {
+    "wrong": "鼎川縱橫天",
+    "correct": "鼎川縱橫天厦",
+    "district": "烏日區",
+    "note": "591比對 DB:8筆 591:21筆"
+  },
+  {
+    "wrong": "19Dali",
+    "correct": "宸堡19Dali",
+    "district": "大里區",
+    "note": "591比對 DB:6筆 591:68筆"
+  },
+  {
+    "wrong": "巨匠傳承2",
+    "correct": "巨匠傳承2-華廈",
+    "district": "外埔區",
+    "note": "591比對 DB:6筆 591:181筆"
+  },
+  {
+    "wrong": "櫻花上河之櫻",
+    "correct": "上河之櫻",
+    "district": "太平區",
+    "note": "591比對 DB:6筆 591:0筆"
+  },
+  {
+    "wrong": "知見",
+    "correct": "華偉知見",
+    "district": "沙鹿區",
+    "note": "591比對 DB:6筆 591:8筆"
+  },
+  {
+    "wrong": "禾豐Ⅲ",
+    "correct": "冠霖禾豐Ⅲ",
+    "district": "后里區",
+    "note": "591比對 DB:6筆 591:9筆"
+  },
+  {
+    "wrong": "勝美豐原II",
+    "correct": "勝美豐原",
+    "district": "豐原區",
+    "note": "591比對 DB:4筆 591:423筆"
+  },
+  {
+    "wrong": "博墅青禾",
+    "correct": "青禾",
+    "district": "后里區",
+    "note": "591比對 DB:4筆 591:40筆"
+  },
+  {
+    "wrong": "君睿",
+    "correct": "坤悅君睿",
+    "district": "南屯區",
+    "note": "591比對 DB:4筆 591:152筆"
+  },
+  {
+    "wrong": "富苑藏豐",
+    "correct": "帝堡NO.33-富苑藏豐",
+    "district": "豐原區",
+    "note": "591比對 DB:4筆 591:19筆"
+  },
+  {
+    "wrong": "帝堡No.32",
+    "correct": "帝堡",
+    "district": "沙鹿區",
+    "note": "591比對 DB:4筆 591:1筆"
+  },
+  {
+    "wrong": "昌祐雲之境",
+    "correct": "X CITY昌祐雲之境",
+    "district": "南區",
+    "note": "591比對 DB:4筆 591:263筆"
+  },
+  {
+    "wrong": "續森",
+    "correct": "陸府續森",
+    "district": "西屯區",
+    "note": "591比對 DB:4筆 591:30筆"
+  },
+  {
+    "wrong": "鋮豐富",
+    "correct": "鋮豐富穥",
+    "district": "龍井區",
+    "note": "591比對 DB:4筆 591:39筆"
+  },
+  {
+    "wrong": "陽明莊園10期",
+    "correct": "陽明莊園10",
+    "district": "新社區",
+    "note": "591比對 DB:4筆 591:2筆"
+  },
+  {
+    "wrong": "青山旭",
+    "correct": "鉅陞青山旭",
+    "district": "南屯區",
+    "note": "591比對 DB:4筆 591:78筆"
+  },
+  {
+    "wrong": "鼎泰上",
+    "correct": "鼎泰上珹",
+    "district": "西區",
+    "note": "591比對 DB:4筆 591:18筆"
+  },
+  {
+    "wrong": "V雋",
+    "correct": "雋業V雋",
+    "district": "北屯區",
+    "note": "591比對 DB:2筆 591:39筆"
+  },
+  {
+    "wrong": "原上琚",
+    "correct": "富宇原上琚",
+    "district": "北屯區",
+    "note": "591比對 DB:2筆 591:34筆"
+  },
+  {
+    "wrong": "吉鑽后科",
+    "correct": "茂居吉鑽后科",
+    "district": "外埔區",
+    "note": "591比對 DB:2筆 591:28筆"
+  },
+  {
+    "wrong": "大及第",
+    "correct": "匯有大及第",
+    "district": "潭子區",
+    "note": "591比對 DB:2筆 591:56筆"
+  },
+  {
+    "wrong": "大鑫琢寓",
+    "correct": "琢寓",
+    "district": "北屯區",
+    "note": "591比對 DB:2筆 591:35筆"
+  },
+  {
+    "wrong": "天山興家六",
+    "correct": "天山興家",
+    "district": "大安區",
+    "note": "591比對 DB:2筆 591:65筆"
+  },
+  {
+    "wrong": "天玥尊爵",
+    "correct": "尊爵",
+    "district": "豐原區",
+    "note": "591比對 DB:2筆 591:10筆"
+  },
+  {
+    "wrong": "奇品臻典II",
+    "correct": "奇品臻典",
+    "district": "東勢區",
+    "note": "591比對 DB:2筆 591:5筆"
+  },
+  {
+    "wrong": "定展敦悅III",
+    "correct": "敦悅III",
+    "district": "梧棲區",
+    "note": "591比對 DB:2筆 591:3筆"
+  },
+  {
+    "wrong": "富宇禾",
+    "correct": "富宇禾沐",
+    "district": "沙鹿區",
+    "note": "591比對 DB:2筆 591:57筆"
+  },
+  {
+    "wrong": "富旺丰厚",
+    "correct": "富旺敦厚-透天(富旺丰厚)",
+    "district": "后里區",
+    "note": "591比對 DB:2筆 591:92筆"
+  },
+  {
+    "wrong": "帝堡NO.35",
+    "correct": "帝堡NO.35-透天",
+    "district": "外埔區",
+    "note": "591比對 DB:2筆 591:1筆"
+  },
+  {
+    "wrong": "建築与詩",
+    "correct": "禾岳建築与詩",
+    "district": "北區",
+    "note": "591比對 DB:2筆 591:16筆"
+  },
+  {
+    "wrong": "慶陽-墅天下",
+    "correct": "墅天下",
+    "district": "大甲區",
+    "note": "591比對 DB:2筆 591:3筆"
+  },
+  {
+    "wrong": "日升樂築Ⅱ",
+    "correct": "日升樂築Ⅱ期",
+    "district": "太平區",
+    "note": "591比對 DB:2筆 591:19筆"
+  },
+  {
+    "wrong": "時代公園大廈",
+    "correct": "時代公園大廈-DIAMOND TOWER",
+    "district": "中區",
+    "note": "591比對 DB:2筆 591:42筆"
+  },
+  {
+    "wrong": "景立方-層峰區",
+    "correct": "浩瀚景立方-層峰區",
+    "district": "北屯區",
+    "note": "591比對 DB:2筆 591:3筆"
+  },
+  {
+    "wrong": "耀鑫",
+    "correct": "大觀遠耀鑫",
+    "district": "太平區",
+    "note": "591比對 DB:2筆 591:1筆"
+  },
+  {
+    "wrong": "花果山",
+    "correct": "麗晨花果山",
+    "district": "西屯區",
+    "note": "591比對 DB:2筆 591:179筆"
+  },
+  {
+    "wrong": "誠寓所",
+    "correct": "陸禾誠寓所",
+    "district": "南屯區",
+    "note": "591比對 DB:2筆 591:27筆"
+  },
+  {
+    "wrong": "輕崧美光2",
+    "correct": "輕崧美光",
+    "district": "后里區",
+    "note": "591比對 DB:2筆 591:30筆"
+  },
+  {
+    "wrong": "錢連全",
+    "correct": "錢連全联",
+    "district": "太平區",
+    "note": "591比對 DB:2筆 591:3筆"
+  },
+  {
+    "wrong": "陶然園",
+    "correct": "大樁陶然園",
+    "district": "太平區",
+    "note": "591比對 DB:2筆 591:11筆"
+  },
+  {
+    "wrong": "驛湛",
+    "correct": "晟溢驛湛",
+    "district": "北屯區",
+    "note": "591比對 DB:2筆 591:13筆"
+  },
+  {
+    "wrong": "忠明",
+    "correct": "和瑞忠明滙",
+    "district": "南區",
+    "note": "591比對 DB:1筆 591:6筆"
+  },
+  {
+    "wrong": "順宇時代",
+    "correct": "順宇時代滙",
+    "district": "東區",
+    "note": "591比對 DB:1筆 591:8筆"
   }
 ]
