@@ -132,6 +132,8 @@ def ensure_all_sheets(sheets, titles, existing):
 
 
 def batch_clear(sheets, titles):
+    # Threads輿情 不清空，改用 append 模式保留同事手動更新的觀看數
+    titles = [t for t in titles if t != "Threads輿情"]
     ranges = [f"'{t}'!A:ZZ" for t in titles]
     api_call(sheets.values().batchClear(
         spreadsheetId=SPREADSHEET_ID, body={"ranges": ranges}).execute)
@@ -712,6 +714,66 @@ def build_threads_sheet(df_threads):
     return rows
 
 
+def append_threads_sheet(sheets, df_threads):
+    """只補新貼文到 Threads輿情 sheet 末端，不清空現有資料（保留同事手動更新的觀看數）"""
+    if df_threads.empty:
+        log("Threads輿情：DB 無資料，略過")
+        return
+
+    # 讀取 sheet 現有的貼文連結（J欄）
+    try:
+        result = api_call(sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range="'Threads輿情'!J:J"
+        ).execute)
+        existing_links = {
+            str(row[0]).strip()
+            for row in result.get("values", [])
+            if row and row[0]
+        }
+    except Exception:
+        existing_links = set()
+
+    # 若 sheet 是空的，先寫入標題列
+    is_empty = len(existing_links) == 0
+    new_rows = []
+    if is_empty:
+        new_rows.append(["Threads 輿情監控（近 90 天）"])
+        new_rows.append(["貼文時間", "來源關鍵字／帳號", "帳號", "顯示名稱",
+                          "內容", "觀看數", "按讚數", "回覆數", "轉發數", "貼文連結"])
+
+    # 只補 sheet 上沒有的貼文連結
+    for _, r in df_threads.iterrows():
+        link = str(r.get("貼文連結", ""))
+        if link and link not in existing_links:
+            new_rows.append([
+                str(r.get("貼文時間", ""))[:16],
+                str(r.get("關鍵字", "")),
+                str(r.get("帳號", "")),
+                str(r.get("顯示名稱", "")),
+                str(r.get("內容", ""))[:500],
+                int(r.get("觀看數", 0) or 0),
+                int(r.get("按讚數", 0) or 0),
+                int(r.get("回覆數", 0) or 0),
+                int(r.get("轉發數", 0) or 0),
+                link,
+            ])
+
+    if not new_rows:
+        log("Threads輿情：無新貼文，略過")
+        return
+
+    api_call(sheets.values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range="'Threads輿情'!A1",
+        valueInputOption="RAW",
+        insertDataOption="INSERT_ROWS",
+        body={"values": clean_rows(new_rows)}
+    ).execute)
+    data_rows = len(new_rows) - (2 if is_empty else 0)
+    log(f"Threads輿情：新增 {data_rows} 筆貼文")
+
+
 def run():
     log("=== 開始寫入 Google Sheet（月報版）===")
     sheets = get_service()
@@ -751,7 +813,6 @@ def run():
         "成屋總表":           build_sale_raw(df_sale),
         "成屋月度統計":       build_sale_month_summary(df_sale),
         "2018-2025成交資料":  build_history_sheet(df_hist),
-        "Threads輿情":        build_threads_sheet(load_threads_data()),
     }
     for dist in actual_districts:
         data_map[dist] = build_district(df, dist)
@@ -759,6 +820,9 @@ def run():
 
     log("批次寫入中...")
     batch_write(sheets, data_map)
+
+    # Threads輿情 單獨 append，保留同事手動更新的觀看數
+    append_threads_sheet(sheets, load_threads_data())
 
     log("=== Google Sheet 更新完成 ===")
     log(f"👉 https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
