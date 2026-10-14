@@ -737,10 +737,12 @@ def append_threads_sheet(sheets, df_threads):
     # 若 sheet 是空的，先寫入標題列
     is_empty = len(existing_links) == 0
     new_rows = []
+    crawl_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+
     if is_empty:
         new_rows.append(["Threads 輿情監控（近 90 天）"])
         new_rows.append(["貼文時間", "來源關鍵字／帳號", "帳號", "顯示名稱",
-                          "內容", "觀看數", "按讚數", "回覆數", "轉發數", "貼文連結"])
+                          "內容", "觀看數", "按讚數", "回覆數", "轉發數", "貼文連結", "抓取時間"])
 
     # 只補 sheet 上沒有的貼文連結
     for _, r in df_threads.iterrows():
@@ -757,6 +759,7 @@ def append_threads_sheet(sheets, df_threads):
                 int(r.get("回覆數", 0) or 0),
                 int(r.get("轉發數", 0) or 0),
                 link,
+                crawl_time,
             ])
 
     if not new_rows:
