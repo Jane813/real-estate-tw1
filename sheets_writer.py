@@ -736,6 +736,7 @@ def append_threads_sheet(sheets, df_threads):
 
     # 若 sheet 是空的，先寫入標題列
     is_empty = len(existing_links) == 0
+    log(f"Threads輿情：DB {len(df_threads)} 筆 / Sheet 已有 {len(existing_links)} 筆連結")
     new_rows = []
     crawl_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -762,6 +763,9 @@ def append_threads_sheet(sheets, df_threads):
                 crawl_time,
             ])
 
+    data_rows = len(new_rows) - (2 if is_empty else 0)
+    log(f"Threads輿情：新增 {data_rows} 筆 / 已存在 {len(df_threads) - data_rows} 筆 / 累積約 {len(existing_links) + data_rows} 筆")
+
     if not new_rows:
         log("Threads輿情：無新貼文，略過")
         return
@@ -773,8 +777,7 @@ def append_threads_sheet(sheets, df_threads):
         insertDataOption="INSERT_ROWS",
         body={"values": clean_rows(new_rows)}
     ).execute)
-    data_rows = len(new_rows) - (2 if is_empty else 0)
-    log(f"Threads輿情：新增 {data_rows} 筆貼文")
+    log(f"Threads輿情：寫入完成")
 
 
 def run():
