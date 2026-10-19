@@ -716,6 +716,33 @@ def build_threads_sheet(df_threads):
 
 def append_threads_sheet(sheets, df_threads):
     """只補新貼文到 Threads輿情 sheet 末端，不清空現有資料（保留同事手動更新的觀看數）"""
+    # 舊的單一區域關鍵字（不含房地產主題詞）會帶入大量無關內容，append 時過濾掉
+    _OLD_DISTRICT_KWS = {
+        "台中西屯區", "台中南屯區", "台中北屯區",
+        "台中豐原區", "台中大里區", "台中太平區",
+        "台中烏日區", "台中北區房", "台中西區房", "台中西區",
+    }
+    _REALESTATE_TERMS = [
+        "房地產", "預售屋", "建案", "買房", "新成屋", "房屋", "房子",
+        "坪", "萬元", "建商", "實價登錄", "交屋", "成屋", "土地",
+        "公寓", "大樓", "透天", "別墅", "開價", "成交", "仲介",
+        "格局", "樓層", "停車", "車位", "首購", "自住", "投資",
+        "房市", "房價", "漲", "跌", "行情",
+    ]
+
+    def _is_relevant(kw, content):
+        if kw in _OLD_DISTRICT_KWS:
+            return any(t in str(content) for t in _REALESTATE_TERMS)
+        return True
+
+    before = len(df_threads)
+    df_threads = df_threads[df_threads.apply(
+        lambda r: _is_relevant(str(r.get("關鍵字", "")), str(r.get("內容", ""))), axis=1
+    )]
+    filtered = before - len(df_threads)
+    if filtered:
+        log(f"Threads輿情：過濾掉舊區域KW非房地產貼文 {filtered} 筆")
+
     if df_threads.empty:
         log("Threads輿情：DB 無資料，略過")
         return
