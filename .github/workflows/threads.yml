@@ -2,7 +2,7 @@ name: Threads 輿情爬蟲
 
 on:
   schedule:
-    - cron: '0 2 * * *'    # 每天 UTC 02:00（台灣時間 10:00）
+    - cron: '0 22 * * *'   # 每天 UTC 22:00（台灣時間 06:00）
   workflow_dispatch:
     inputs:
       since:
