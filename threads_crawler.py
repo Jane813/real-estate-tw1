@@ -84,9 +84,34 @@ _BROKER_AD_PATTERNS = [
     "不動產有限公司", "經紀人｜", "登字第",
 ]
 
+# 強房地產信號：有任一個就保留
+_STRONG_RE_TERMS = [
+    "預售屋", "建案", "買房", "新成屋", "房屋", "實價登錄",
+    "建商", "交屋", "透天", "別墅", "首購", "房市", "房價",
+    "公寓", "大樓", "格局", "樓層", "開價", "成交價",
+    "坪數", "坪，", "坪。", "坪！", "坪\n", "室內坪",
+]
+
+# 非房產「房」字用法：有這些但沒有強信號 → 排除
+_NON_RE_HOUSE = ["廚房", "健身房", "房間", "包廂房", "飯店房", "旅館"]
+
+
 def _is_broker_ad(content):
     c = str(content)
     return any(p in c for p in _BROKER_AD_PATTERNS)
+
+
+def _has_strong_re_signal(content):
+    c = str(content)
+    return any(t in c for t in _STRONG_RE_TERMS)
+
+
+def _is_non_re_house_context(content):
+    """內容含廚房/健身房等非房產「房」字，且缺乏強房地產信號 → 應排除"""
+    c = str(content)
+    if _has_strong_re_signal(c):
+        return False
+    return any(t in c for t in _NON_RE_HOUSE)
 
 
 def save_posts(posts):
@@ -96,9 +121,14 @@ def save_posts(posts):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     inserted = 0
     skipped_broker = 0
+    skipped_non_re = 0
     for p in posts:
-        if _is_broker_ad(p.get("內容", "")):
+        content = p.get("內容", "")
+        if _is_broker_ad(content):
             skipped_broker += 1
+            continue
+        if _is_non_re_house_context(content):
+            skipped_non_re += 1
             continue
         try:
             conn.execute("""
@@ -121,6 +151,8 @@ def save_posts(posts):
     conn.close()
     if skipped_broker:
         print(f"  略過仲介廣告：{skipped_broker} 筆")
+    if skipped_non_re:
+        print(f"  略過非房產「房」字貼文：{skipped_non_re} 筆")
     return inserted
 
 

@@ -734,12 +734,29 @@ def append_threads_sheet(sheets, df_threads):
         "經紀業名稱", "營業員字號", "經紀字第", "加盟店｜",
         "不動產有限公司", "經紀人｜", "登字第",
     ]
+    _STRONG_RE_TERMS = [
+        "預售屋", "建案", "買房", "新成屋", "房屋", "實價登錄",
+        "建商", "交屋", "透天", "別墅", "首購", "房市", "房價",
+        "公寓", "大樓", "格局", "樓層", "開價", "成交價",
+        "坪數", "坪，", "坪。", "坪！", "坪\n", "室內坪",
+    ]
+    _NON_RE_HOUSE = ["廚房", "健身房", "房間", "包廂房", "飯店房", "旅館"]
 
     def _is_broker_ad(content):
         return any(p in str(content) for p in _BROKER_AD_PATTERNS)
 
+    def _has_strong_re(content):
+        return any(t in str(content) for t in _STRONG_RE_TERMS)
+
+    def _is_non_re_house(content):
+        if _has_strong_re(content):
+            return False
+        return any(t in str(content) for t in _NON_RE_HOUSE)
+
     def _is_relevant(kw, content):
         if _is_broker_ad(content):
+            return False
+        if _is_non_re_house(content):
             return False
         if kw in _OLD_DISTRICT_KWS:
             return any(t in str(content) for t in _REALESTATE_TERMS)
