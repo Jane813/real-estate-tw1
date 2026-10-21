@@ -737,6 +737,7 @@ def append_threads_sheet(sheets, df_threads):
         "中市字第",
         # 租屋廣告
         "租金：", "租金:", "月租金", "押金：", "押金:", "出租中", "誠租",
+        "可貓", "可寵", "可租補", "租屋補助", "可入籍", "租約", "彈性租約",
         # 寵物店/非房產業者
         "特寵業繁字第", "貓舍", "繁字第S",
     ]
@@ -746,7 +747,10 @@ def append_threads_sheet(sheets, df_threads):
         "公寓", "大樓", "格局", "樓層", "開價", "成交價",
         "坪數", "坪，", "坪。", "坪！", "坪\n", "室內坪",
     ]
-    _NON_RE_HOUSE = ["廚房", "健身房", "房間", "包廂房", "飯店房", "旅館"]
+    _NON_RE_HOUSE = [
+        "廚房", "健身房", "房間", "包廂房", "飯店房", "旅館",
+        "集合", "#集合",
+    ]
 
     def _is_broker_ad(content):
         return any(p in str(content) for p in _BROKER_AD_PATTERNS)
