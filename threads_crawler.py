@@ -78,13 +78,28 @@ def init_db():
     conn.close()
 
 
+# 仲介業務廣告特徵詞，含任一則排除
+_BROKER_AD_PATTERNS = [
+    "經紀業名稱", "營業員字號", "經紀字第", "加盟店｜",
+    "不動產有限公司", "經紀人｜", "登字第",
+]
+
+def _is_broker_ad(content):
+    c = str(content)
+    return any(p in c for p in _BROKER_AD_PATTERNS)
+
+
 def save_posts(posts):
     if not posts:
         return 0
     conn = sqlite3.connect(DB_PATH)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     inserted = 0
+    skipped_broker = 0
     for p in posts:
+        if _is_broker_ad(p.get("內容", "")):
+            skipped_broker += 1
+            continue
         try:
             conn.execute("""
                 INSERT OR IGNORE INTO threads_posts
@@ -104,6 +119,8 @@ def save_posts(posts):
             print(f"  存入失敗：{e}")
     conn.commit()
     conn.close()
+    if skipped_broker:
+        print(f"  略過仲介廣告：{skipped_broker} 筆")
     return inserted
 
 

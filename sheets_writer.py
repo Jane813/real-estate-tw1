@@ -730,7 +730,17 @@ def append_threads_sheet(sheets, df_threads):
         "房市", "房價", "漲", "跌", "行情",
     ]
 
+    _BROKER_AD_PATTERNS = [
+        "經紀業名稱", "營業員字號", "經紀字第", "加盟店｜",
+        "不動產有限公司", "經紀人｜", "登字第",
+    ]
+
+    def _is_broker_ad(content):
+        return any(p in str(content) for p in _BROKER_AD_PATTERNS)
+
     def _is_relevant(kw, content):
+        if _is_broker_ad(content):
+            return False
         if kw in _OLD_DISTRICT_KWS:
             return any(t in str(content) for t in _REALESTATE_TERMS)
         return True
@@ -741,7 +751,7 @@ def append_threads_sheet(sheets, df_threads):
     )]
     filtered = before - len(df_threads)
     if filtered:
-        log(f"Threads輿情：過濾掉舊區域KW非房地產貼文 {filtered} 筆")
+        log(f"Threads輿情：過濾掉仲介廣告或舊區域KW非房地產貼文 {filtered} 筆")
 
     if df_threads.empty:
         log("Threads輿情：DB 無資料，略過")
