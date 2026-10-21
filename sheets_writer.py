@@ -744,12 +744,23 @@ def append_threads_sheet(sheets, df_threads):
         "暗黑炮兵團",
         # 寵物店/非房產業者
         "特寵業繁字第", "貓舍", "繁字第S",
+        # 美甲/美容
+        "美甲", "美睫",
+        # 咖啡廳/餐廳格式
+        "今日甜點", "/營業時間", "低消：", "用餐限時",
+        # 招募/應徵格式
+        "工作內容：", "薪資待遇", "薪資面議", "工時：",
+        # 二手商品
+        "9成新", "8成新",
     ]
     _STRONG_RE_TERMS = [
         "預售屋", "建案", "買房", "新成屋", "房屋", "實價登錄",
         "建商", "交屋", "透天", "別墅", "首購", "房市", "房價",
         "公寓", "大樓", "格局", "樓層", "開價", "成交價",
         "坪數", "坪，", "坪。", "坪！", "坪\n", "室內坪",
+        "房子", "地坪", "建坪", "土地", "地段",
+        "新建案", "預推案",
+        "驗屋", "房仲", "公設", "屋主", "買地", "建地", "房貸",
     ]
     _NON_RE_HOUSE = [
         "廚房", "健身房", "房間", "包廂房", "飯店房", "旅館",
@@ -773,8 +784,9 @@ def append_threads_sheet(sheets, df_threads):
             return False
         if _is_non_re_house(content):
             return False
-        if kw in _OLD_DISTRICT_KWS:
-            return any(t in str(content) for t in _REALESTATE_TERMS)
+        # 關鍵字搜尋來的貼文（以台中開頭），需含至少一個強房地產信號
+        if str(kw).startswith("台中") and not _has_strong_re(content):
+            return False
         return True
 
     before = len(df_threads)

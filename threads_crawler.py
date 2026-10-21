@@ -96,6 +96,14 @@ _BROKER_AD_PATTERNS = [
     "暗黑炮兵團",
     # 寵物店/非房產業者
     "特寵業繁字第", "貓舍", "繁字第S",
+    # 美甲/美容
+    "美甲", "美睫",
+    # 咖啡廳/餐廳格式
+    "今日甜點", "/營業時間", "低消：", "用餐限時",
+    # 招募/應徵格式
+    "工作內容：", "薪資待遇", "薪資面議", "工時：",
+    # 二手商品
+    "9成新", "8成新",
 ]
 
 # 強房地產信號：有任一個就保留
@@ -104,6 +112,9 @@ _STRONG_RE_TERMS = [
     "建商", "交屋", "透天", "別墅", "首購", "房市", "房價",
     "公寓", "大樓", "格局", "樓層", "開價", "成交價",
     "坪數", "坪，", "坪。", "坪！", "坪\n", "室內坪",
+    "房子", "地坪", "建坪", "土地", "地段",
+    "新建案", "預推案",
+    "驗屋", "房仲", "公設", "屋主", "買地", "建地", "房貸",
 ]
 
 # 非房產「房」字用法 + 無關集合文：有這些但沒有強信號 → 排除
@@ -142,6 +153,7 @@ def save_posts(posts):
     inserted = 0
     skipped_broker = 0
     skipped_non_re = 0
+    skipped_no_signal = 0
     for p in posts:
         content = p.get("內容", "")
         if _is_broker_ad(content):
@@ -149,6 +161,10 @@ def save_posts(posts):
             continue
         if _is_non_re_house_context(content):
             skipped_non_re += 1
+            continue
+        # 關鍵字搜尋來的貼文，內容需含至少一個強房地產信號
+        if p.get("來源類型") == "keyword" and not _has_strong_re_signal(content):
+            skipped_no_signal += 1
             continue
         try:
             conn.execute("""
@@ -173,6 +189,8 @@ def save_posts(posts):
         print(f"  略過仲介廣告：{skipped_broker} 筆")
     if skipped_non_re:
         print(f"  略過非房產「房」字貼文：{skipped_non_re} 筆")
+    if skipped_no_signal:
+        print(f"  略過無房地產信號：{skipped_no_signal} 筆")
     return inserted
 
 
